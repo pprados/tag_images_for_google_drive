@@ -1,0 +1,366 @@
+# -*- coding: utf-8 -*-
+"""
+Tools inject hashtag in file description and synchronize this tags in CSV file.
+"""
+import csv
+import itertools
+import logging
+import os
+import sys
+from pathlib import Path
+# from __future__ import annotations
+from typing import Dict, Tuple, Sequence, Optional, Mapping, AbstractSet, List
+
+import click
+import click_pathlib
+from exiftool import ExifTool
+
+from .tools import Glob, init_logger
+
+LOGGER = logging.getLogger(__name__)
+
+
+def _set_tags(exif_tool: ExifTool, meta_info: Mapping[str, str], file: Path) -> None:
+    """
+       Set tags in file
+
+       :param exif_tool: Exif tool wrapper
+       :param meta_info: A dictionary of meta info
+       :param file: The filename
+    """
+    params = [bytearray("-" + key + "=" + val, "UTF-8") for key, val in meta_info.items()]
+    params.append(bytearray(str(file), "UTF-8"))
+    exif_tool.execute(*params)
+
+
+def _purge_tags(tags: Sequence[str]) -> List[str]:
+    """
+       Purge tags. Remove duplicate and sort tags
+
+       :param tags: A sequence of tags
+       :return: purged tags
+    """
+    return sorted({key.strip().lower() for key in tags if key})
+
+
+def _extract_tags(description: str, separator: str) -> Tuple[str, List[str]]:
+    """
+       Extract tags. Extract Hashtag after the first '#'.
+
+       :param description: A description with hashtag.
+       :return: A tuple with only the description and a list of hashtag.
+    """
+    sp = description.split(separator)
+    tags = list(itertools.chain(*[x.split(",") for x in sp[1:]]))
+    tags = list(itertools.chain(*[x.split(";") for x in tags]))
+    return sp[0].strip(), _purge_tags(tags)
+
+
+def _extract_description(metadata: Mapping[str, str]) -> str:
+    """
+       Extract description from image file.
+
+       :param metadata: Extracted meta-data from file.
+       :return: The description
+    """
+    description = ""
+    description = metadata.get("IPTC:Headline", description)
+    description = metadata.get("EXIF:ImageDescription", description)
+    description = metadata.get("IPTC:Caption-Abstract", description)
+    description = metadata.get("PNG:Description", description)
+    description = metadata.get("XMP:Description", description)
+    description = metadata.get("PNG:Comment", description)
+    description = metadata.get("File:Comment", description)
+    return description
+
+
+def _extract_description_and_tags(exif_tool: ExifTool, file: Path) -> Tuple[bool, str, Sequence[str]]:
+    """
+       Extract description and tags from image file.
+
+       :param exif_tool: Exif tool wrapper
+       :param file: The file path name.
+       :return: A tuple with true if the must be updated, the description and all hashtags
+    """
+    metadata = exif_tool.get_tags(["Comment", "Description", "Caption-Abstract", "imageDescription", "Headline",
+                                   "Keywords"], str(file))
+
+    # Extract description with hash tags
+    description = _extract_description(metadata)
+
+    # Extract keywords
+    keywords: List[str] = []
+    # Limit to 64 chars
+    keywords = metadata.get("IPTC:Keywords", keywords)
+    if isinstance(keywords, str):
+        if len(keywords) < 63:  # I can trust the keywords tag
+            _, keywords = _extract_tags("," + keywords, ",")
+            keywords = keywords + _extract_tags(description, "#")[1]
+            old_keywords = keywords
+        else:
+            keywords = _extract_tags(description, "#")[1]
+            keywords = [i for i in keywords if i]  # Remove empty tags
+            old_keywords = keywords
+    else:
+        old_keywords = keywords
+        keywords = keywords + _extract_tags(description, "#")[1]
+
+    old_keywords = _purge_tags(old_keywords)
+    keywords = _purge_tags(keywords)
+    description = description.split('#')[0]
+    must_update = old_keywords != keywords
+    return must_update, description.strip(), keywords
+
+
+def tag_images_for_google_drive(
+        input_files: AbstractSet[Path],
+        database: Optional[Path],
+        tag_file: Optional[Path] = None,
+        from_files: bool = False,
+        from_db: bool = False,
+        dry: bool = False) -> Tuple[Mapping[Path, Tuple[str, Sequence[str]]], Mapping[Path, Tuple[str, Sequence[str]]]]:
+    """
+    Analyse csv and files to extract tag and inject hash tag in description.
+    :param database: The CSV file or None
+    :param input_files: A set of filename
+    :param tag_file: A filename to save all tags or None
+    :param from_file: A boolean value to use only the files names
+    :param from_db: A boolean value to use only the CSV file
+    :param dry: True to simulate the modification in files.
+    :return: A tuple with the new data base and the description of all modified files.
+    """
+    assert bool(from_files) + bool(from_db) < 2
+    merge = not from_db and not from_files
+    assert not ((from_db or merge) and not database)
+
+    updated_files: Dict[Path, Tuple[str, Sequence[str]]] = {}  # Files to update
+
+    update_descriptions = False
+    ref_descriptions: Dict[Path, Tuple[str, Sequence[str]]] = {}
+    description_date = 0.0
+
+    if database and database.is_file():
+        description_date = database.stat().st_mtime
+        with open(str(database)) as csv_file:
+            ref_descriptions = {Path(row[0]): _extract_tags(row[1], '#') for row in csv.reader(csv_file, delimiter=',')}
+
+    with ExifTool() as exif_tool:
+        # 1. Update images files
+        update_descriptions = _manage_files(exif_tool, input_files, ref_descriptions, update_descriptions,
+                                            updated_files)
+
+        # 2. Apply the descriptions file
+        update_descriptions = _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_descriptions,
+                                         update_descriptions, updated_files)
+
+        # 3. Apply update files
+        _manage_updated_files(exif_tool, dry, updated_files)
+
+        # 4. Update description
+        _manage_updated_db(database, dry, ref_descriptions, update_descriptions)
+
+    # 5. Count tags
+    all_tags: AbstractSet[str] = set()
+    for _, (_, keywords) in ref_descriptions.items():
+        all_tags = set(all_tags).union(keywords)
+    LOGGER.info(f"Use {len(all_tags)} tags")
+    if tag_file:
+        all_tags = set(sorted(all_tags))
+        with open(str(tag_file), 'w') as f:
+            for tag in all_tags:
+                f.write(tag + os.linesep)
+
+    LOGGER.debug(f"Done")
+    return ref_descriptions, updated_files
+
+
+def _manage_updated_db(database, dry, ref_descriptions, update_descriptions):
+    if database and not dry and update_descriptions:
+        LOGGER.debug(f"Update csv file...")
+        new_csv_file = database.with_suffix(".csv.new")
+        with open(str(new_csv_file), 'w') as f:
+
+            writer = csv.writer(f)
+
+            for path, (description, keywords) in ref_descriptions.items():
+                str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
+                description = description.strip()
+                description_and_tags = f"{description} {str_tags}" if len(description) > 0 else str_tags
+                writer.writerow([str(path), description_and_tags])
+
+        # Commit change
+        database.unlink()
+        new_csv_file.rename(database)
+
+
+def _manage_updated_files(exif_tools, dry, updated_files):
+    LOGGER.debug(f"Update identified files in csv ...")
+    for file, (description, keywords) in updated_files.items():
+        str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
+        description = description.strip()
+        description_and_tags = f"{description} {str_tags}" if len(description) > 0 else str_tags
+        if description_and_tags != "":
+            LOGGER.info(f"Update '{file.relative_to(Path.cwd())}' with '{description_and_tags}'")
+            if not dry:
+                iptc_keywords = ",".join(keywords)
+                while len(iptc_keywords) >= 63:
+                    iptc_keywords = iptc_keywords[:iptc_keywords.rfind(',')]
+                _set_tags(exif_tools,
+                          {"Comment": description_and_tags,
+                           "Description": description_and_tags,
+                           "ImageDescription": description,
+                           "Caption-Abstract": description,
+                           "Headline": description,
+                           "KeyWords": iptc_keywords
+                           },
+                          file)
+
+
+def _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_descriptions, update_descriptions,
+               updated_files):
+    if not from_files:
+        LOGGER.debug(f"Apply csv file...")
+        remove_files = []
+        for rel_file, (desc, tags) in ref_descriptions.items():
+            file = rel_file.absolute()
+            if file.is_file():
+                file_date = file.stat().st_mtime
+                must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
+                if not keywords:
+                    LOGGER.warning(f"{file.relative_to(Path.cwd())} has not tags")
+                if must_update:
+                    updated_files[file] = (description, keywords)
+                if from_db and (must_update or desc != description or tags != keywords):
+                    LOGGER.debug(f"Refresh file '{file}'")
+                    updated_files[file] = (desc, tags)
+                elif file not in updated_files and (must_update or desc != description or tags != keywords):
+                    update_descriptions = _manage_file_and_db(desc, description, description_date, file, file_date,
+                                                              from_db, keywords, merge, ref_descriptions, rel_file,
+                                                              tags, update_descriptions, updated_files)
+            else:
+                # LOGGER.debug(f"Remove in csv file '{rel_file}'")
+                remove_files.append(rel_file)
+
+        for rel_file in remove_files:
+            ref_descriptions.pop(rel_file)
+    return update_descriptions
+
+
+def _manage_file_and_db(desc, description, description_date, file, file_date, from_db, keywords, merge,
+                        # pylint: disable=R0913
+                        ref_descriptions, rel_file, tags, update_descriptions, updated_files):
+    if from_db:
+        updated_files[file] = (desc, tags)
+    elif file not in updated_files:
+        if merge:
+            new_tags = sorted(set(tags).union(keywords))
+            if new_tags != keywords:
+                updated_files[file] = (desc, new_tags)
+            if new_tags != tags:
+                tags = new_tags
+                update_descriptions = True
+                ref_descriptions[rel_file] = (desc, tags)
+                LOGGER.debug(
+                    f"{'Update' if rel_file in ref_descriptions else 'Add'} "
+                    f"in csv file '{rel_file}'")
+
+            # Use recent description
+            if desc == "":
+                desc = description
+            if file_date > description_date and desc != "":
+                desc = description
+                update_descriptions = True
+                ref_descriptions[rel_file] = (desc, tags)
+                LOGGER.debug(
+                    f"{'Update' if rel_file in ref_descriptions else 'Add'} "
+                    f"in csv file '{rel_file}'")
+
+        if desc == "" or tags != keywords:
+            update_descriptions = True
+            if desc == "":
+                desc = description
+            LOGGER.debug(
+                f"{'Update' if rel_file in ref_descriptions else 'Add'} "
+                f"in csv file '{rel_file}'")
+            ref_descriptions[rel_file] = (desc, tags)
+        LOGGER.debug(f"Refresh file '{file}' with {tags}")
+        updated_files[file] = (desc, tags)
+    return update_descriptions
+
+
+def _manage_files(exif_tool: ExifTool, input_files, ref_descriptions, update_descriptions, updated_files):
+    LOGGER.debug("Update images...")
+    for file in input_files:
+        file = file.absolute()
+        must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
+        if must_update:
+            update_descriptions = True
+            updated_files[file] = (description, keywords)
+        rel_file = file.relative_to(Path.cwd())
+        if rel_file not in ref_descriptions:
+            LOGGER.debug(f"{'Update' if rel_file in ref_descriptions else 'Add'} in csv file '{rel_file}'")
+            update_descriptions = True
+            ref_descriptions[rel_file] = (description, keywords)
+    return update_descriptions
+
+
+@click.command(short_help="Synchronize and update csv and files hash-tags")
+@click.argument("input_files", metavar='<selected files>', type=Glob(default_suffix="**/*.jpg"), nargs=-1)
+@click.option("--db", metavar='<csv file>', type=click_pathlib.Path(exists=False, file_okay=True), help="CSV database")
+@click.option("--tagfile", metavar='<tag file>', type=click_pathlib.Path(exists=False, file_okay=True), default=None,
+              help="Export all tags in text file")
+@click.option("-f", '--from-files', is_flag=True, default=False, help="Use only tags from files")
+@click.option("-fdb", '--from-db', is_flag=True, default=False, help="Use only tags from csv file")
+@click.option("--dry", default=False, is_flag=True, help="Dry run")
+@click.option("-v", '--verbose', count=True, help="Verbosity")
+def main(  # pylint: disable=C0103
+        input_files: Sequence[Sequence[Path]],
+        db: Optional[Path] = None,
+        tagfile: Optional[Path] = None,
+        from_files: bool = False,
+        from_db: bool = False,
+        dry: bool = False,
+        verbose: int = 0):
+    """Synchronize CSV database and PNG/JPEG files to add #hashtag in image description.
+       Then, you can synchronize all files with Google drive.
+
+       Google drive use only the description meta-data to index an image.
+       After this synchronisation it's possible to search an image with
+       "type:image an_hash_tag".
+
+       By default, this tools merge the tags from CSV and files.
+    """
+    level_mapping = [logging.WARN, logging.INFO, logging.DEBUG]
+    if verbose >= len(level_mapping):
+        verbose = len(level_mapping) - 1
+
+    init_logger(LOGGER, level_mapping[verbose])
+
+    if not db:
+        from_files = True
+
+    if bool(from_files) + bool(from_db) > 1:
+        LOGGER.error("--from_files and --from_db are mutually incompatible")
+        return -1
+    if (from_db or not from_files) and not db:
+        LOGGER.error("Set --db <file> with --from_files or --merge")
+        return -1
+
+    # Flat map input files
+    all_input_files = set(itertools.chain(*input_files))
+    ref_descriptions, _ = tag_images_for_google_drive(
+        input_files=all_input_files,
+        database=db,
+        from_files=from_files,
+        from_db=from_db,
+        tag_file=tagfile,
+        dry=dry)
+    if verbose >= 3:
+        LOGGER.debug("File csv file:")
+        for path, (description, tags) in ref_descriptions.items():
+            LOGGER.debug(f"{path}, {description} {tags}")
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())  # pylint: disable=E1120
