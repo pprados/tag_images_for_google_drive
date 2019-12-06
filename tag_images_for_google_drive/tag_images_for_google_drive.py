@@ -83,33 +83,51 @@ def _extract_description_and_tags(exif_tool: ExifTool, file: Path) -> Tuple[bool
        :return: A tuple with true if the must be updated, the description and all hashtags
     """
     metadata = exif_tool.get_tags(["Comment", "Description", "Caption-Abstract", "imageDescription", "Headline",
-                                   "Keywords"], str(file))
+                                   "Keywords", "Subject"], str(file))
 
     # Extract description with hash tags
     description = _extract_description(metadata)
 
     # Extract keywords
-    keywords: List[str] = []
-    # Limit to 64 chars
-    keywords = metadata.get("IPTC:Keywords", keywords)
-    if isinstance(keywords, str):
-        if len(keywords) < 63:  # I can trust the keywords tag
-            _, keywords = _extract_tags("," + keywords, ",")
-            keywords = keywords + _extract_tags(description, "#")[1]
-            old_keywords = keywords
-        else:
-            keywords = _extract_tags(description, "#")[1]
-            keywords = [i for i in keywords if i]  # Remove empty tags
-            old_keywords = keywords
-    else:
-        old_keywords = keywords
-        keywords = keywords + _extract_tags(description, "#")[1]
+    keywords, old_keywords = _extract_keywords(description, metadata)
 
     old_keywords = _purge_tags(old_keywords)
     keywords = _purge_tags(keywords)
     description = description.split('#')[0]
     must_update = old_keywords != keywords
     return must_update, description.strip(), keywords
+
+
+def _extract_keywords(description, metadata):
+    keywords: List[str] = []
+    # Limit to 64 chars
+    keywords = metadata.get("XMP:Subject")
+    if not keywords:
+        LOGGER.debug("Use IPTC:Keywords")
+        keywords = metadata.get("IPTC:Keywords", keywords)
+        if isinstance(keywords, str):
+            if len(keywords) < 63:  # I can trust the keywords tag
+                _, keywords = _extract_tags("," + keywords, ",")
+                keywords = keywords + _extract_tags(description, "#")[1]
+                old_keywords = keywords
+            else:
+                keywords = _extract_tags(description, "#")[1]
+                keywords = [str(i) for i in keywords if i]  # Remove empty tags
+                old_keywords = keywords
+        elif keywords:
+            keywords = [str(key) for key in keywords]
+            old_keywords = keywords
+            keywords = keywords + _extract_tags(description, "#")[1]
+        else:
+            old_keywords = keywords = []
+    else:
+        if isinstance(keywords, str):
+            _, keywords = _extract_tags("," + keywords, ",")
+        keywords = [str(key) for key in keywords]
+        old_keywords = keywords
+        keywords = sorted(set(keywords + _extract_tags(description, "#")[1]))
+    # Force use str
+    return keywords, old_keywords
 
 
 def tag_images_for_google_drive(
@@ -165,7 +183,7 @@ def tag_images_for_google_drive(
         all_tags = set(all_tags).union(keywords)
     LOGGER.info(f"Use {len(all_tags)} tags")
     if tag_file:
-        all_tags = set(sorted(all_tags))
+        all_tags = sorted(set(all_tags))
         with open(str(tag_file), 'w') as f:
             for tag in all_tags:
                 f.write(tag + os.linesep)
@@ -202,7 +220,8 @@ def _manage_updated_files(exif_tools, dry, updated_files):
         if description_and_tags != "":
             LOGGER.info(f"Update '{file.relative_to(Path.cwd())}' with '{description_and_tags}'")
             if not dry:
-                iptc_keywords = ",".join(keywords)
+                subject = ",".join(keywords)
+                iptc_keywords = subject
                 while len(iptc_keywords) >= 63:
                     iptc_keywords = iptc_keywords[:iptc_keywords.rfind(',')]
                 _set_tags(exif_tools,
@@ -211,7 +230,8 @@ def _manage_updated_files(exif_tools, dry, updated_files):
                            "ImageDescription": description,
                            "Caption-Abstract": description,
                            "Headline": description,
-                           "KeyWords": iptc_keywords
+                           "KeyWords": iptc_keywords,
+                           "Subject": subject,
                            },
                           file)
 
@@ -345,6 +365,11 @@ def main(  # pylint: disable=C0103
     if (from_db or not from_files) and not db:
         LOGGER.error("Set --db <file> with --from_files or --merge")
         return -1
+
+    if not db and not input_files:
+        ctx = click.get_current_context()
+        click.echo(ctx.get_help())
+        return 0
 
     # Flat map input files
     all_input_files = set(itertools.chain(*input_files))

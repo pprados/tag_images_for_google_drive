@@ -3,7 +3,7 @@
 ## Motivation
 
 Synchronize a CSV database and PNG/JPEG files to add #hashtag in image description.
-Then, you can synchronize all file with Google drive.
+Then, you can synchronize all files with Google drive.
 
 By default, this tools merge the tags from CSV and files.
 
@@ -14,6 +14,10 @@ After this synchronisation it's possible to search an image with
 "type:image an_hash_tag".
 
 This tools use [Exiftools](https://github.com/exiftool/exiftool)
+
+You can update the tags inside the description in your CSV file,
+or use some others tools like [XnView](https://www.xnview.com/fr/)
+and extract tags to CSV and descriptions.
 
 ## The latest version
 
@@ -39,10 +43,6 @@ To validate the typing
 ```bash
 $ make typing
 ```
-or to add type in code
-```bash
-$ make add-typing
-```
 
 To validate all the project
 ```bash
@@ -62,8 +62,7 @@ $ make validate
     │                            so sources can be imported and dependencies installed
     ├── tag_images_for_google_drive                <- Source code for use in this project
     │   ├── __init__.py       <- Makes src a Python module
-    │   ├── tools/__init__.py <- Python module to expose internal API
-    │   └── tools/tools.py    <- Python module for functions, object, etc
+    │   └── tools.py          <- Python module for functions, object, etc
     │
     └── tests                 <- Unit and integrations tests ((Mark directory as a sources root).
 

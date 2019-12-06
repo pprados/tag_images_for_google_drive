@@ -124,3 +124,4 @@ datas/interim/
 # Jupyter Notebook
 .ipynb_checkpoints
 
+.make-*
