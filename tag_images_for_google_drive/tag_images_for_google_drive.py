@@ -29,6 +29,7 @@ def _set_tags(exif_tool: ExifTool, meta_info: Mapping[str, str], file: Path) -> 
        :param file: The filename
     """
     params = [bytearray("-" + key + "=" + val, "UTF-8") for key, val in meta_info.items()]
+    params.append(bytearray(str("-overwrite_original"), "UTF-8"))
     params.append(bytearray(str(file), "UTF-8"))
     exif_tool.execute(*params)
 
@@ -119,7 +120,8 @@ def _extract_keywords(description, metadata):
             old_keywords = keywords
             keywords = keywords + _extract_tags(description, "#")[1]
         else:
-            old_keywords = keywords = []
+            old_keywords = []
+            keywords = _extract_tags(description, "#")[1]
     else:
         if isinstance(keywords, str):
             _, keywords = _extract_tags("," + keywords, ",")
@@ -179,11 +181,15 @@ def tag_images_for_google_drive(
 
     # 5. Count tags
     all_tags: AbstractSet[str] = set()
+    nb_files = len(ref_descriptions)
+    nb_total_tags = 0
     for _, (_, keywords) in ref_descriptions.items():
+        nb_total_tags += len(keywords)
         all_tags = set(all_tags).union(keywords)
-    LOGGER.info(f"Use {len(all_tags)} tags")
-    if tag_file:
-        all_tags = sorted(set(all_tags))
+    LOGGER.info(f"Use {nb_total_tags} tags in {nb_files} files, with a dictionary of {len(all_tags)} "
+                f"({int(nb_files / nb_total_tags * 100) if nb_total_tags else 0} t/f).")
+    if not dry and tag_file:
+        all_tags = set(sorted(set(all_tags)))
         with open(str(tag_file), 'w') as f:
             for tag in all_tags:
                 f.write(tag + os.linesep)
@@ -192,48 +198,20 @@ def tag_images_for_google_drive(
     return ref_descriptions, updated_files
 
 
-def _manage_updated_db(database, dry, ref_descriptions, update_descriptions):
-    if database and not dry and update_descriptions:
-        LOGGER.debug(f"Update csv file...")
-        new_csv_file = database.with_suffix(".csv.new")
-        with open(str(new_csv_file), 'w') as f:
-
-            writer = csv.writer(f)
-
-            for path, (description, keywords) in ref_descriptions.items():
-                str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
-                description = description.strip()
-                description_and_tags = f"{description} {str_tags}" if len(description) > 0 else str_tags
-                writer.writerow([str(path), description_and_tags])
-
-        # Commit change
-        database.unlink()
-        new_csv_file.rename(database)
-
-
-def _manage_updated_files(exif_tools, dry, updated_files):
-    LOGGER.debug(f"Update identified files in csv ...")
-    for file, (description, keywords) in updated_files.items():
-        str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
-        description = description.strip()
-        description_and_tags = f"{description} {str_tags}" if len(description) > 0 else str_tags
-        if description_and_tags != "":
-            LOGGER.info(f"Update '{file.relative_to(Path.cwd())}' with '{description_and_tags}'")
-            if not dry:
-                subject = ",".join(keywords)
-                iptc_keywords = subject
-                while len(iptc_keywords) >= 63:
-                    iptc_keywords = iptc_keywords[:iptc_keywords.rfind(',')]
-                _set_tags(exif_tools,
-                          {"Comment": description_and_tags,
-                           "Description": description_and_tags,
-                           "ImageDescription": description,
-                           "Caption-Abstract": description,
-                           "Headline": description,
-                           "KeyWords": iptc_keywords,
-                           "Subject": subject,
-                           },
-                          file)
+def _manage_files(exif_tool: ExifTool, input_files, ref_descriptions, update_descriptions, updated_files):
+    LOGGER.debug("Update images...")
+    for file in input_files:
+        file = file.absolute()
+        must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
+        if must_update:
+            update_descriptions = True
+            updated_files[file] = (description, keywords)
+        rel_file = file.relative_to(Path.cwd())
+        if rel_file not in ref_descriptions:
+            LOGGER.debug(f"{'Update' if rel_file in ref_descriptions else 'Add'} in csv file '{rel_file}'")
+            update_descriptions = True
+            ref_descriptions[rel_file] = (description, keywords)
+    return update_descriptions
 
 
 def _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_descriptions, update_descriptions,
@@ -264,6 +242,55 @@ def _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_desc
         for rel_file in remove_files:
             ref_descriptions.pop(rel_file)
     return update_descriptions
+
+
+def _manage_updated_files(exif_tools, dry, updated_files):
+    LOGGER.debug(f"Update identified files in csv ...")
+    for file, (description, keywords) in updated_files.items():
+        str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
+        description = description.strip()
+        description_and_tags = f"{description} {str_tags}" if len(description) > 0 else str_tags
+        if description_and_tags != "":
+            LOGGER.info(f"Update '{file.relative_to(Path.cwd())}' with '{description_and_tags}'")
+            if not dry:
+                subject = ",".join(keywords)
+                iptc_keywords = subject
+                while len(iptc_keywords) >= 63:
+                    iptc_keywords = iptc_keywords[:iptc_keywords.rfind(',')]
+                _set_tags(exif_tools,
+                          {"Comment": description_and_tags,
+                           "Description": description_and_tags,
+                           "ImageDescription": description,
+                           "Caption-Abstract": description,
+                           "Headline": description,
+                           "KeyWords": iptc_keywords,
+                           "Subject": subject,
+                           },
+                          file)
+
+
+def _manage_updated_db(database, dry, ref_descriptions, update_descriptions):
+    if database and not dry and update_descriptions:
+        try:
+            LOGGER.debug(f"Update csv file...")
+            new_csv_file = database.with_suffix(".csv.tmp")
+            with open(str(new_csv_file), 'w') as f:
+
+                writer = csv.writer(f)
+                ref_descriptions = {key: ref_descriptions[key] for key in sorted(ref_descriptions.keys())}
+                for path, (description, keywords) in ref_descriptions.items():
+                    str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
+                    description = description.strip()
+                    description_and_tags = f"{description} {str_tags}" if len(description) > 0 else str_tags
+                    writer.writerow([str(path), description_and_tags])
+                f.flush()
+            # Commit change
+            if database.is_file():
+                database.unlink()
+            new_csv_file.rename(database)
+        finally:
+            if new_csv_file.is_file():
+                new_csv_file.unlink()
 
 
 def _manage_file_and_db(desc, description, description_date, file, file_date, from_db, keywords, merge,
@@ -305,22 +332,6 @@ def _manage_file_and_db(desc, description, description_date, file, file_date, fr
             ref_descriptions[rel_file] = (desc, tags)
         LOGGER.debug(f"Refresh file '{file}' with {tags}")
         updated_files[file] = (desc, tags)
-    return update_descriptions
-
-
-def _manage_files(exif_tool: ExifTool, input_files, ref_descriptions, update_descriptions, updated_files):
-    LOGGER.debug("Update images...")
-    for file in input_files:
-        file = file.absolute()
-        must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
-        if must_update:
-            update_descriptions = True
-            updated_files[file] = (description, keywords)
-        rel_file = file.relative_to(Path.cwd())
-        if rel_file not in ref_descriptions:
-            LOGGER.debug(f"{'Update' if rel_file in ref_descriptions else 'Add'} in csv file '{rel_file}'")
-            update_descriptions = True
-            ref_descriptions[rel_file] = (description, keywords)
     return update_descriptions
 
 

@@ -81,7 +81,7 @@ copyright = 'Philippe PRADOS'
 
 html_use_opensearch = ''
 
-htmlhelp_basename = 'tag_images_for_gdrivedoc'
+htmlhelp_basename = 'tag_images_for_google_drive'
 
 latex_engine = 'pdflatex'
 latex_elements = {

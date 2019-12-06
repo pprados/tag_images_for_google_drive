@@ -117,7 +117,7 @@ dump-%:
 .git:
 	@if [[ ! -d .git ]]; then
 		git init -q
-		git commit --allow-empty -m "Create project tag_images_for_gdrive"
+		git commit --allow-empty -m "Create project $(PRJ)"
 	fi
 
 
@@ -286,14 +286,14 @@ pytype.cfg: $(CONDA_PREFIX)/bin/pytype
 .make-typing: $(REQUIREMENTS) $(CONDA_PREFIX)/bin/pytype pytype.cfg $(PYTHON_SRC)
 	$(VALIDATE_VENV)
 	@echo -e "$(cyan)Check typing...$(normal)"
-	MYPYPATH=./stubs/ mypy tag_images_for_gdrive
+	MYPYPATH=./stubs/ mypy $(PRJ)
 	touch .make-typing
 ## Check python typing
 typing: .make-typing
 
 ## Add infered typing in module
 add-typing: typing
-	@find -L tag_images_for_gdrive -type f -name '*.py' -exec merge-pyi -i {} .pytype/pyi/{}i \;
+	@find -L $(PRJ) -type f -name '*.py' -exec merge-pyi -i {} .pytype/pyi/{}i \;
 	for phase in scripts/*
 	do
 	  ( cd $$phase ; find -L . -type f -name '*.py' -exec merge-pyi -i {} .pytype/pyi/{}i \; )
@@ -301,13 +301,11 @@ add-typing: typing
 
 
 .PHONY: docs
-# Use all processors
-#PPR SPHINX_FLAGS=-j$(NPROC)
 SPHINX_FLAGS=
 # Generate API docs
 docs/source: $(REQUIREMENTS) $(PYTHON_SRC)
 	$(VALIDATE_VENV)
-	sphinx-apidoc -f -o docs/source tag_images_for_gdrive/
+	sphinx-apidoc -f -o docs/source $(PRJ)/
 	touch docs/source
 
 # Build the documentation in specificed format (build/html, build/latexpdf, ...)
@@ -325,11 +323,11 @@ ifeq ($(OFFLINE),True)
 		@echo -e "$(red)Can not to build '$$TARGET' in offline mode$(normal)"
 	fi
 endif
+
 # Build all format of documentations
 ## Generate and show the HTML documentation
 docs: build/html
 	@$(BROWSER) build/html/index.html
-
 
 .PHONY: sdist
 dist/$(PRJ_PACKAGE)-*.tar.gz: $(REQUIREMENTS)
@@ -383,16 +381,6 @@ else
 	echo "Enter Pypi password"
 	ls $(PWD)/dist/* --hide "*.dev*" | xargs twine upload
 endif
-
-
-
-
-
-# Download raw data if necessary
-$(DATA)/raw:
-
-
-
 
 .PHONY: clean-pyc
 # Clean pre-compiled files
@@ -466,3 +454,17 @@ test: .make-test
 .PHONY: validate
 ## Validate the version before release
 validate: .make-test .make-lint .make-typing build/html build/linkcheck
+
+$(CONDA_PREFIX)/bin/$(PRJ):
+	python setup.py install
+
+## Install the tools in conda env
+install: $(CONDA_PREFIX)/bin/$(PRJ)
+
+## Install the tools in conda env with 'develop' link
+develop:
+	python setup.py develop
+
+## Install the tools in conda env
+uninstall: $(CONDA_PREFIX)/bin/$(PRJ)
+	rm $(CONDA_PREFIX)/bin/$(PRJ)

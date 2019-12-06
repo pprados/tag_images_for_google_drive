@@ -8,7 +8,7 @@ from pathlib import Path
 from exiftool import ExifTool
 
 # noinspection PyProtectedMember
-from tag_images_for_gdrive.tag_images_for_gdrive import _extract_tags, _extract_description_and_tags, \
+from tag_images_for_google_drive.tag_images_for_google_drive import _extract_tags, _extract_description_and_tags, \
     tag_images_for_google_drive
 
 

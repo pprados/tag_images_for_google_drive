@@ -71,7 +71,7 @@ setup(
     url=_git_http_url(),
 
     license='Apache License',
-    keywords="data science",
+    keywords="image index google drive",
     classifiers=[  # See https://pypi.org/classifiers/
         'Development Status :: 2 - PRE-ALPHA',
         # Before release
@@ -84,7 +84,7 @@ setup(
         'Operating System :: OS Independent',
         'Topic :: Scientific/Engineering :: Artificial Intelligence',
     ],
-    python_requires='~=3.8',  # Version de Python
+    python_requires='~=3.8',
     test_suite="tests",
     setup_requires=setup_requirements,
     tests_require=test_requirements,

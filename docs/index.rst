@@ -1,8 +1,8 @@
 ==============================================================
 tag_images_for_google_drive
 ==============================================================
-.. todo::
-   Manage tags and description to be indexed by Google Drive
+
+Manage tags and descriptions in image files to be indexed by Google Drive
 
 .. ifconfig:: version.find("dev")
 .. warning::
