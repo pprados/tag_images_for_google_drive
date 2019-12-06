@@ -7,8 +7,7 @@ from typing import List
 
 from setuptools import setup, find_packages
 
-# Package nécessaires à l'execution
-# FIXME Ajoutez et ajustez les dépendences nécessaire à l'exécution.
+# Package for run
 requirements: List[str] = [
     'click', 'click-pathlib',
     'PyExifTool',
@@ -16,7 +15,7 @@ requirements: List[str] = [
 
 setup_requirements: List[str] = ["pytest-runner", "setuptools_scm"]
 
-# Package nécessaires aux tests
+# Package for tests
 test_requirements: List[str] = [
     'pytest>=2.8.0',
     'pytest-openfiles',  # For tests
@@ -25,8 +24,7 @@ test_requirements: List[str] = [
     'unittest2',
 ]
 
-# Package nécessaires aux builds mais pas au run
-# FIXME Ajoutez les dépendances nécessaire au build et au tests à ajuster suivant le projet
+# Package for builds
 dev_requirements: List[str] = [
     'pip',
     'twine',  # To publish package in Pypi
@@ -75,9 +73,9 @@ setup(
     classifiers=[  # See https://pypi.org/classifiers/
         'Development Status :: 2 - PRE-ALPHA',
         # Before release
-        # 'Development Status :: 5 - Production/Stable'
+        #'Development Status :: 5 - Production/Stable',
         'Environment :: Console',
-        'Intended Audience :: Developers',
+        'Intended Audience :: End Users/Desktop',
         'License :: OSI Approved',
         'Natural Language :: English',
         'Programming Language :: Python :: 3.8',
@@ -94,7 +92,7 @@ setup(
     },
     packages=find_packages(),
     package_data={"tag_images_for_google_drive": ["py.typed"]},
-    use_scm_version=True,  # Gestion des versions à partir des tags Git
+    use_scm_version=True,
     install_requires=requirements,
     entry_points={
         "console_scripts": [

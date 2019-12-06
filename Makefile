@@ -332,7 +332,7 @@ docs: build/html
 .PHONY: sdist
 dist/$(PRJ_PACKAGE)-*.tar.gz: $(REQUIREMENTS)
 	@$(VALIDATE_VENV)
-	python setup.py sdist
+	./setup.py sdist
 
 # Create a source distribution
 sdist: dist/$(PRJ_PACKAGE)-*.tar.gz
@@ -340,7 +340,7 @@ sdist: dist/$(PRJ_PACKAGE)-*.tar.gz
 .PHONY: bdist
 dist/$(subst -,_,$(PRJ_PACKAGE))-*.whl: $(REQUIREMENTS)
 	@$(VALIDATE_VENV)
-	python setup.py bdist_wheel
+	./setup.py bdist_wheel
 
 # Create a binary wheel distribution
 bdist: dist/$(subst -,_,$(PRJ_PACKAGE))-*.whl
@@ -367,7 +367,7 @@ ifeq ($(OFFLINE),True)
 	@echo -e "$(red)Can not test-twine in offline mode$(normal)"
 else
 	$(VALIDATE_VENV)
-	ls . --hide "*.dev*" | xargs twine upload --sign --repository-url https://test.pypi.org/legacy/
+	twine upload --sign --repository-url https://test.pypi.org/legacy/ dist/*
 endif
 
 .PHONY: release
