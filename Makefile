@@ -10,6 +10,11 @@ ifeq ($(OS),Windows_NT)
 else
     OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown')
 endif
+ifeq ($(OS),Windows)
+EXE:=.exe
+else
+EXE:=
+endif
 
 NPROC?=$(shell nproc)
 
@@ -41,7 +46,7 @@ PRJ:=$(shell basename $(shell pwd))
 VENV ?= $(PRJ)
 
 PRJ_PACKAGE:=$(PRJ)
-PYTHON_VERSION:=3.8
+PYTHON_VERSION:=3.7
 
 # Data directory (can be in other place, in VM or Docker for example)
 export DATA?=data
@@ -54,7 +59,6 @@ CONDA_ARGS?=
 
 PIP_PACKAGE:=$(CONDA_PACKAGE)/$(PRJ_PACKAGE).egg-link
 PIP_ARGS?=
-
 
 EXTRA_INDEX:=--extra-index-url=https://pypi.anaconda.org/octo
 
@@ -120,8 +124,6 @@ dump-%:
 		git commit --allow-empty -m "Create project $(PRJ)"
 	fi
 
-
-
 .git/hooks/pre-push: | .git
 	@# Add a hook to validate the project before a git push
 	cat >.git/hooks/pre-push <<PRE-PUSH
@@ -155,8 +157,6 @@ dump-%:
 	@git config --local core.autocrlf input
 	# Set tabulation to 4 when use 'git diff'
 	@git config --local core.page 'less -x4'
-
-
 ifeq ($(shell which daff >/dev/null ; echo "$$?"),0)
 	# Add rules to manage diff with daff for CSV file
 	@git config --local diff.daff-csv.command "daff.py diff --git"
@@ -185,9 +185,6 @@ requirements: $(REQUIREMENTS)
 dependencies: requirements
 
 
-
-# TODO: faire une regle ~/.offline et un variable qui s'ajuste pour tirer la dépendances ?
-# ou bien le faire à la main ?
 # Download dependencies for offline usage
 ~/.mypypi: setup.py
 	pip download '.[dev,test]' --dest ~/.mypypi
@@ -208,11 +205,10 @@ $(PIP_PACKAGE): $(CONDA_PYTHON) setup.py | .git # Install pip dependencies
 	@$(VALIDATE_VENV)
 	echo -e "$(cyan)Install setup.py dependencies ... (may take minutes)$(normal)"
 	pip install $(PIP_ARGS) $(EXTRA_INDEX) -e '.[dev,test]' | grep -v 'already satisfied' || true
+	# See https://github.com/pyinstaller/pyinstaller/issues/4265
+	# which pyinstaller || pip install https://github.com/pyinstaller/pyinstaller/archive/develop.tar.gz
 	echo -e "$(cyan)setup.py dependencies updated$(normal)"
 	@touch $(PIP_PACKAGE)
-
-
-
 
 
 .PHONY: configure
@@ -242,21 +238,6 @@ else
 endif
 # Upgrade packages to last versions
 upgrade-venv: upgrade-$(VENV)
-
-
-.PHONY: run-*
-scripts/.make-%: $(REQUIREMENTS)
-	$(VALIDATE_VENV)
-	time ls scripts/$*/*.py | grep -v __ | sed 's/\.py//g; s/\//\./g' | \
-		xargs -L 1 -t python -O -m
-	@date >scripts/.make-$*
-
-# All phases
-scripts/phases: $(sort $(subst scripts/,scripts/.make-,$(wildcard scripts/*)))
-
-# Invoke all script in lexical order from scripts/<% dir>
-run-%:
-	$(MAKE) scripts/.make-$*
 
 .PHONY: lint
 .pylintrc:
@@ -452,19 +433,28 @@ test: .make-test
 
 
 .PHONY: validate
+.make-validate: .make-test .make-lint .make-typing build/html build/linkcheck
+	@date >.make-validate
 ## Validate the version before release
-validate: .make-test .make-lint .make-typing build/html build/linkcheck
+validate: .make-validate
 
-$(CONDA_PREFIX)/bin/$(PRJ):
+$(CONDA_PREFIX)/bin/$(PRJ): $(REQUIREMENTS)
 	python setup.py install
 
 ## Install the tools in conda env
 install: $(CONDA_PREFIX)/bin/$(PRJ)
 
 ## Install the tools in conda env with 'develop' link
-develop:
+develop: $(REQUIREMENTS)
 	python setup.py develop
 
 ## Install the tools in conda env
 uninstall: $(CONDA_PREFIX)/bin/$(PRJ)
 	rm $(CONDA_PREFIX)/bin/$(PRJ)
+
+
+dist/$(PRJ)$(EXE): .make-validate
+	@PYTHONOPTIMIZE=2 && pyinstaller --onefile $(PRJ)/$(PRJ).py
+	echo -e "$(cyan)Executable is here 'dist/$(PRJ)$(EXE)'$(normal)"
+## Build standalone executable for this OS
+installer: dist/$(PRJ)$(EXE)

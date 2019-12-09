@@ -6,16 +6,16 @@ import csv
 import itertools
 import logging
 import os
+import shutil
 import sys
 from pathlib import Path
-# from __future__ import annotations
 from typing import Dict, Tuple, Sequence, Optional, Mapping, AbstractSet, List
 
 import click
 import click_pathlib
 from exiftool import ExifTool
 
-from .tools import Glob, init_logger
+from tag_images_for_google_drive.tools import Glob, init_logger
 
 LOGGER = logging.getLogger(__name__)
 
@@ -163,6 +163,10 @@ def tag_images_for_google_drive(
         description_date = database.stat().st_mtime
         with open(str(database)) as csv_file:
             ref_descriptions = {Path(row[0]): _extract_tags(row[1], '#') for row in csv.reader(csv_file, delimiter=',')}
+
+    if not shutil.which("exiftool"):
+        LOGGER.error("Install exiftool in PATH before to use tag_images_for_google_drive")
+        raise OSError(-1, "exiftool not found")
 
     with ExifTool() as exif_tool:
         # 1. Update images files
@@ -361,41 +365,44 @@ def main(  # pylint: disable=C0103
 
        By default, this tools merge the tags from CSV and files.
     """
-    level_mapping = [logging.WARN, logging.INFO, logging.DEBUG]
-    if verbose >= len(level_mapping):
-        verbose = len(level_mapping) - 1
+    try:
+        level_mapping = [logging.WARN, logging.INFO, logging.DEBUG]
+        if verbose >= len(level_mapping):
+            verbose = len(level_mapping) - 1
 
-    init_logger(LOGGER, level_mapping[verbose])
+        init_logger(LOGGER, level_mapping[verbose])
 
-    if not db:
-        from_files = True
+        if not db:
+            from_files = True
 
-    if bool(from_files) + bool(from_db) > 1:
-        LOGGER.error("--from_files and --from_db are mutually incompatible")
-        return -1
-    if (from_db or not from_files) and not db:
-        LOGGER.error("Set --db <file> with --from_files or --merge")
-        return -1
+        if bool(from_files) + bool(from_db) > 1:
+            LOGGER.error("--from_files and --from_db are mutually incompatible")
+            return -1
+        if (from_db or not from_files) and not db:
+            LOGGER.error("Set --db <file> with --from_files or --merge")
+            return -1
 
-    if not db and not input_files:
-        ctx = click.get_current_context()
-        click.echo(ctx.get_help())
+        if not db and not input_files:
+            ctx = click.get_current_context()
+            click.echo(ctx.get_help())
+            return 0
+
+        # Flat map input files
+        all_input_files = set(itertools.chain(*input_files))
+        ref_descriptions, _ = tag_images_for_google_drive(
+            input_files=all_input_files,
+            database=db,
+            from_files=from_files,
+            from_db=from_db,
+            tag_file=tagfile,
+            dry=dry)
+        if verbose >= 3:
+            LOGGER.debug("File csv file:")
+            for path, (description, tags) in ref_descriptions.items():
+                LOGGER.debug(f"{path}, {description} {tags}")
         return 0
-
-    # Flat map input files
-    all_input_files = set(itertools.chain(*input_files))
-    ref_descriptions, _ = tag_images_for_google_drive(
-        input_files=all_input_files,
-        database=db,
-        from_files=from_files,
-        from_db=from_db,
-        tag_file=tagfile,
-        dry=dry)
-    if verbose >= 3:
-        LOGGER.debug("File csv file:")
-        for path, (description, tags) in ref_descriptions.items():
-            LOGGER.debug(f"{path}, {description} {tags}")
-    return 0
+    except OSError as e:
+        return e.errno
 
 
 if __name__ == '__main__':

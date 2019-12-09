@@ -7,10 +7,13 @@ from typing import List
 
 from setuptools import setup, find_packages
 
+PYTHON_VERSION = "3.7"
+
 # Package for run
 requirements: List[str] = [
     'click', 'click-pathlib',
     'PyExifTool',
+    'PyInstaller',
 ]
 
 setup_requirements: List[str] = ["pytest-runner", "setuptools_scm"]
@@ -73,16 +76,16 @@ setup(
     classifiers=[  # See https://pypi.org/classifiers/
         'Development Status :: 2 - PRE-ALPHA',
         # Before release
-        #'Development Status :: 5 - Production/Stable',
+        # 'Development Status :: 5 - Production/Stable',
         'Environment :: Console',
         'Intended Audience :: End Users/Desktop',
         'License :: OSI Approved',
         'Natural Language :: English',
-        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: ' + PYTHON_VERSION,
         'Operating System :: OS Independent',
         'Topic :: Scientific/Engineering :: Artificial Intelligence',
     ],
-    python_requires='~=3.8',
+    python_requires='~=' + PYTHON_VERSION,
     test_suite="tests",
     setup_requires=setup_requirements,
     tests_require=test_requirements,
@@ -91,7 +94,11 @@ setup(
         'test': test_requirements,
     },
     packages=find_packages(),
-    package_data={"tag_images_for_google_drive": ["py.typed"]},
+    package_data={
+        "tag_images_for_google_drive": ["py.typed"],
+    },
+
+    zip_safe=True,
     use_scm_version=True,
     install_requires=requirements,
     entry_points={
