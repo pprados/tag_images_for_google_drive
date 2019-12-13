@@ -39,13 +39,68 @@ For more informations
 
     tag_images_for_google_drive --help
 
+
+To synchronize the google files, you can use differents tools.
+In the proposed Docker image, we use the google-drive-ocamlfuse.
+
 ## The latest version
 
 Clone the git repository (see upper button)
 
 ## Installation
 
-TODO
+Different solutions is possible.
+
+### Installation from one executable
+- Copy the file 'tag_images_for_google_drive.${OS}' to local directory
+- Rename this file to 'tag_images_for_google_drive'
+- And run-it
+
+
+    tag_images_for_google_drive --help
+
+### Installation from PIP
+- In virtualenv, conda env, use
+
+
+    pip install tag_images_for_google_drive
+
+- Then, run-it
+
+
+    tag_images_for_google_drive --help
+
+
+### Installtion in Docker
+- From the source code, use `make Dockerfile`
+- WARNING, this image have the credential for manipulate all yours Google files
+- Eventually, create a dedicated volume for the GDrive cache
+
+
+    docker volume create --name tag_image_for_google_drive
+
+- Create the container with custom parameters
+
+
+    docker build \
+		-f Dockerfile \
+		--build-arg OS_VERSION="latest" \
+		--build-arg GDRIVE_ROOT_FOLDER="/Images" \
+		--build-arg PARAMS="'**/*.png' '**/*.jpg'" \
+		--build-arg CRON_FREQUENCE="* */12 * * *" \
+		-t "$(USER)/tag_image_for_google_drive:latest" .
+
+- Start the container
+
+
+    docker run --detach --cpus=0.5 \
+        --privileged \
+		-v tag_image_for_google_drive:/cache
+		-i "$(USER)/tag_image_for_google_drive:latest"
+
+Inside the container, a `google-drive-ocamlfuse` is installed to synchronize the google files
+from `GDRIVE_ROOT_FOLDER` in the cache, and a crontab is periodically executed (see `CRON_REQUENCE`)
+to invoke `tag_image_for_google_drive` with `PARAMS`.
 
 ## Installation from source
 

@@ -17,6 +17,7 @@ EXE:=
 endif
 
 NPROC?=$(shell nproc)
+SUDO?=
 
 define BROWSER
 	python -c '
@@ -44,6 +45,10 @@ endif
 
 PRJ:=$(shell basename $(shell pwd))
 VENV ?= $(PRJ)
+DOCKER_REPOSITORY?=$(USER)
+DOCKER_PARAMS?=--db descriptions.csv --tagfile tags.txt '**/*.png' '**/*.jpg'
+DOCKER_GDRIVE_ROOT_FOLDER?=/Images
+DOCKER_CRON_FREQUENCE?=* */12 * * *
 
 PRJ_PACKAGE:=$(PRJ)
 PYTHON_VERSION:=3.7
@@ -290,7 +295,7 @@ docs/source: $(REQUIREMENTS) $(PYTHON_SRC)
 	touch docs/source
 
 # Build the documentation in specificed format (build/html, build/latexpdf, ...)
-build/%: $(REQUIREMENTS) docs/source docs/* README.md CHANGELOG.md | .git
+build/%: $(REQUIREMENTS) docs/source docs/* *.md | .git
 	@$(VALIDATE_VENV)
 	@TARGET=$(*:build/%=%)
 ifeq ($(OFFLINE),True)
@@ -455,6 +460,143 @@ uninstall: $(CONDA_PREFIX)/bin/$(PRJ)
 
 dist/$(PRJ)$(EXE): .make-validate
 	@PYTHONOPTIMIZE=2 && pyinstaller --onefile $(PRJ)/$(PRJ).py
+	touch dist/$(PRJ)$(EXE)
 	echo -e "$(cyan)Executable is here 'dist/$(PRJ)$(EXE)'$(normal)"
 ## Build standalone executable for this OS
 installer: dist/$(PRJ)$(EXE)
+
+
+# Initialize and get a token API
+gdfuse/default/state:
+	[[ -e ~/.gdfuse ]] && mv ~/.gdfuse ~/.gdfuse.old
+	google-drive-ocamlfuse -debug -config "$${PWD}/gdfuse/default/config"
+	cp ~/.gdfuse/default/state gdfuse/default
+	rm -Rf ~/.gdfuse
+	[[ -e ~/.gdfuse.old ]] && mv ~/.gdfuse.old ~/.gdfuse
+
+
+# Update the dockerfile with the setup datas and version
+Dockerfile: setup.py
+	@# Build docker image
+	VERSION="$$(./setup.py --version)"
+	DESCRIPTION="$$(./setup.py --description)"
+	LICENSE="$$(./setup.py --license)"
+	AUTHOR="$$(./setup.py --author)"
+	AUTHOR_EMAIL="$$(./setup.py --author-email)"
+	KEYWORDS="$$(./setup.py --keywords)"
+	D='$$'
+
+	cat >Dockerfile <<EOF
+	# DO NOT ADD THIS FILE TO VERSION CONTROL!
+	ARG OS_VERSION=latest
+
+	FROM ubuntu:$${D}{OS_VERSION}
+	ARG PARAMS
+	ARG GDRIVE_ROOT_FOLDER
+	ARG CRON_FREQUENCE="* */12 * * *"
+	ENV _PARAMS="$${D}{PARAMS}"
+	ENV _GDRIVE_ROOT_FOLDER="$${D}{GDRIVE_ROOT_FOLDER}"
+	ENV _CRON_FREQUENCE="$${D}{CRON_FREQUENCE}"
+
+	LABEL version="$${VERSION}"
+	LABEL description="$${DESCRIPTION}"
+	LABEL license="$${LICENSE}"
+	LABEL keywords="$${KEYWORDS}"
+	LABEL maintainer="$${AUTHOR}"
+
+	COPY dist/tag_images_for_google_drive /
+	RUN apt-get update && \
+		apt-get install -y  exiftool software-properties-common cron gettext-base && \
+		add-apt-repository ppa:alessandro-strada/ppa && \
+		apt-get update && \
+		apt-get install -y google-drive-ocamlfuse && \
+		rm -rf /var/lib/apt/lists/* && \
+		apt-get remove -y software-properties-common
+	RUN mkdir -p /root/.gdfuse/default
+	COPY gdfuse/default/config.template /root/.gdfuse/default/config.template
+	RUN envsubst </root/.gdfuse/default/config.template >/root/.gdfuse/default/config
+	COPY gdfuse/default/state /root/.gdfuse/default/state
+
+	RUN echo "$${D}{_CRON_FREQUENCE} cd \"/gdrive\" && /tag_images_for_google_drive $${D}{_PARAMS} > /proc/1/fd/1 2>/proc/1/fd/2" >/etc/cron.d/crontab
+	RUN /usr/bin/crontab /etc/cron.d/crontab
+	CMD mkdir -p "/gdrive" && \
+		google-drive-ocamlfuse -headless "/gdrive" && \
+		/usr/sbin/cron -f
+	EOF
+	# TODO RUN echo "* */4 * * *
+
+# WARNING: never publish the container. The Google drive tokens are inside !
+.make-docker-build: Dockerfile dist/$(PRJ)$(EXE) gdfuse/default/state
+	@# Detect release version
+	if [[ "$${VERSION}" =~ "^[0-9](\.[0-9])+$$" ]];
+	then
+		TAG_VERSION=-t "$(DOCKER_REPOSITORY)/$(PRJ):$${VERSION}"
+	fi
+	$(SUDO) docker build \
+		-f Dockerfile \
+		--build-arg OS_VERSION="latest" \
+		--build-arg PARAMS="$(DOCKER_PARAMS)" \
+		--build-arg GDRIVE_ROOT_FOLDER="$(DOCKER_GDRIVE_ROOT_FOLDER)" \
+		--build-arg CRON_FREQUENCE="$(DOCKER_CRON_FREQUENCE)" \
+		$${TAG_VERSION} \
+		-t "$(DOCKER_REPOSITORY)/$(PRJ):latest" .
+	echo -e "$(yellow)Never publish this image$(normal)"
+	date >.make-docker-build
+
+## Build the docker <PRJ>:latest
+docker-build: .make-docker-build
+
+# Reset and rebuild the container
+docker-rebuild:
+	@rm -f Dockerfile .make-docker-build
+	$(MAKE) docker-stop docker-start
+
+# Start and attach the container
+docker-run: .cid_docker_daemon docker-attach
+
+# Create a dedicated volume with the Google Drive cache
+docker-volume:
+	@$(SUDO) docker volume inspect "$(PRJ)" >/dev/null 2>&1 || \
+	$(SUDO) docker volume create --name "$(PRJ)"
+	echo -e "$(cyan)Docker volume '$(PRJ)' created$(normal)"
+
+.cid_docker_daemon: .make-docker-build
+	@$(SUDO) docker volume inspect "$(PRJ)" >/dev/null 2>&1 || $(MAKE) docker-volume
+	$(SUDO) docker run \
+		--detach \
+		--cpus=0.5 --privileged \
+		--cidfile ".cid_docker_daemon" \
+		-v $(PRJ):/cache \
+		-i "$(DOCKER_REPOSITORY)/$(PRJ):latest"
+	echo -e "$(cyan)Docker daemon started$(normal)"
+	#	--detach \
+
+# TODO: root_folder= cache_directory=
+## Start a daemon container with the docker image
+docker-start: .cid_docker_daemon
+
+## Attach to the docker
+docker-attach: .cid_docker_daemon
+	@CID=$$(cat .cid_docker_daemon)
+	$(SUDO) docker attach "$${CID}"
+
+## Connect a bash in the container
+docker-bash: .cid_docker_daemon
+	@CID=$$(cat .cid_docker_daemon)
+	$(SUDO) docker exec -i -t "$${CID}" /bin/bash
+
+## Stop the container daemon
+docker-stop:
+	@if [[ -e ".cid_docker_daemon" ]] ; then
+		CID=$$(cat .cid_docker_daemon)
+		$(SUDO) docker stop "$${CID}" || true
+		rm -f .cid_docker_daemon
+		echo -e "$(cyan)Docker daemon stopped$(normal)"
+	fi
+
+docker-logs: .cid_docker_daemon
+	@$(SUDO) docker container logs -f "$(PRJ)"
+
+docker-top: .cid_docker_daemon
+	@$(SUDO) docker container top "$(PRJ)"
+

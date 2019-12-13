@@ -119,9 +119,11 @@ site/
 *.rdb
 
 # Project
-datas/interim/
+gdfuse/default/state
+.cid_docker_daemon
+.pid_docker_daemon
+Dockerfile
+import_env.sh
 
-# Jupyter Notebook
-.ipynb_checkpoints
 
 .make-*

@@ -138,7 +138,8 @@ def tag_images_for_google_drive(
         tag_file: Optional[Path] = None,
         from_files: bool = False,
         from_db: bool = False,
-        dry: bool = False) -> Tuple[Mapping[Path, Tuple[str, Sequence[str]]], Mapping[Path, Tuple[str, Sequence[str]]]]:
+        dry: bool = False,
+        verbose: int = 0) -> Tuple[Mapping[Path, Tuple[str, Sequence[str]]], Mapping[Path, Tuple[str, Sequence[str]]]]:
     """
     Analyse csv and files to extract tag and inject hash tag in description.
     :param database: The CSV file or None
@@ -163,7 +164,8 @@ def tag_images_for_google_drive(
         description_date = database.stat().st_mtime
         with open(str(database)) as csv_file:
             ref_descriptions = {Path(row[0]): _extract_tags(row[1], '#') for row in csv.reader(csv_file, delimiter=',')}
-
+    else:
+        update_descriptions = True
     if not shutil.which("exiftool"):
         LOGGER.error("Install exiftool in PATH before to use tag_images_for_google_drive")
         raise OSError(-1, "exiftool not found")
@@ -171,11 +173,11 @@ def tag_images_for_google_drive(
     with ExifTool() as exif_tool:
         # 1. Update images files
         update_descriptions = _manage_files(exif_tool, input_files, ref_descriptions, update_descriptions,
-                                            updated_files)
+                                            updated_files, verbose)
 
         # 2. Apply the descriptions file
         update_descriptions = _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_descriptions,
-                                         update_descriptions, updated_files)
+                                         update_descriptions, updated_files, verbose)
 
         # 3. Apply update files
         _manage_updated_files(exif_tool, dry, updated_files)
@@ -202,28 +204,33 @@ def tag_images_for_google_drive(
     return ref_descriptions, updated_files
 
 
-def _manage_files(exif_tool: ExifTool, input_files, ref_descriptions, update_descriptions, updated_files):
+def _manage_files(exif_tool: ExifTool, input_files, ref_descriptions, update_descriptions, updated_files, verbose=0):
     LOGGER.debug("Update images...")
     for file in input_files:
         file = file.absolute()
+        rel_file = file.relative_to(Path.cwd())
+        if verbose >= 2:
+            LOGGER.debug(f"Inspect {rel_file}...")
         must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
         if must_update:
             update_descriptions = True
             updated_files[file] = (description, keywords)
-        rel_file = file.relative_to(Path.cwd())
         if rel_file not in ref_descriptions:
             LOGGER.debug(f"{'Update' if rel_file in ref_descriptions else 'Add'} in csv file '{rel_file}'")
             update_descriptions = True
             ref_descriptions[rel_file] = (description, keywords)
+    LOGGER.debug("Update images done")
     return update_descriptions
 
 
 def _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_descriptions, update_descriptions,
-               updated_files):
+               updated_files, verbose=0):
     if not from_files:
         LOGGER.debug(f"Apply csv file...")
         remove_files = []
         for rel_file, (desc, tags) in ref_descriptions.items():
+            if verbose >= 2:
+                LOGGER.debug(f"Inspect {rel_file}...")
             file = rel_file.absolute()
             if file.is_file():
                 file_date = file.stat().st_mtime
@@ -245,6 +252,7 @@ def _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_desc
 
         for rel_file in remove_files:
             ref_descriptions.pop(rel_file)
+        LOGGER.debug(f"Apply csv file done")
     return update_descriptions
 
 
@@ -395,7 +403,8 @@ def main(  # pylint: disable=C0103
             from_files=from_files,
             from_db=from_db,
             tag_file=tagfile,
-            dry=dry)
+            dry=dry,
+            verbose=verbose)
         if verbose >= 3:
             LOGGER.debug("File csv file:")
             for path, (description, tags) in ref_descriptions.items():
