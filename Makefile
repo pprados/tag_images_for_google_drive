@@ -301,8 +301,8 @@ build/%: $(REQUIREMENTS) docs/source docs/* *.md | .git
 ifeq ($(OFFLINE),True)
 	if [ "$$TARGET" != "linkcheck" ] ; then
 endif
-	@echo "Build $$TARGET..."
-	@LATEXMKOPTS=-silent sphinx-build -M $$TARGET docs build $(SPHINX_FLAGS)
+	echo "Build $$TARGET..."
+	LATEXMKOPTS=-silent sphinx-build -M $$TARGET docs build $(SPHINX_FLAGS)
 	touch build/$$TARGET
 ifeq ($(OFFLINE),True)
 	else

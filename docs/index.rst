@@ -8,20 +8,19 @@ Manage tags and descriptions in image files to be indexed by Google Drive
 .. warning::
     WARNING: It's not a released version !
 
-tag_images_for_google_drive documentation
-==============================================
+Tag images for google drive documentation
+=========================================
 
-Contents:
 
 .. toctree::
    :maxdepth: 2
 
-   contribute
+   README
    commands
-   readme
-   changelog
+   contribute
+   CHANGELOG
    source/modules
-   todo
+
 
 Indices and tables
 ==================
@@ -29,3 +28,4 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
+

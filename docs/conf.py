@@ -42,12 +42,12 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.viewcode',
 
-    'm2r',
+    'sphinx.ext.autosectionlabel',
+    'recommonmark',
 ]
+autosectionlabel_prefix_document = True
 
 templates_path = ['_templates']
-
-source_suffix = '.rst'
 
 master_doc = 'index'
 
@@ -63,7 +63,7 @@ release = version
 exclude_patterns = ['../tests']
 exclude_patterns += ['_build', '**.ipynb_checkpoints']
 
-show_authors = False
+show_authors = True
 
 pygments_style = 'sphinx'
 
@@ -131,3 +131,9 @@ rst_prolog = f"""
 .. |homeurl| replace:: {home_url}
 .. |s3_bucket| replace:: {s3_bucket}
 """
+
+# The suffix of source filenames.
+source_suffix = {
+    '.rst': 'restructuredtext',
+    '.md': 'markdown',
+}

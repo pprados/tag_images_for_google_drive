@@ -31,7 +31,7 @@ test_requirements: List[str] = [
 dev_requirements: List[str] = [
     'pip',
     'twine',  # To publish package in Pypi
-    'sphinx', 'sphinx-execute-code', 'sphinx_rtd_theme', 'm2r', 'nbsphinx',  # To generate doc
+    'sphinx', 'sphinx-execute-code', 'sphinx_rtd_theme', 'recommonmark', 'nbsphinx',  # To generate doc
     'flake8', 'pylint',  # For lint
     'daff',
     'mypy',

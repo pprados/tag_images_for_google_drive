@@ -19,5 +19,5 @@ then:
     $ make docs
 
 
-* A ``make validate`` was executed before a ``git push`` in branch ``master``.
+* A ``make validate`` is executed before a ``git push`` in branch ``master``.
   It possible to force the push with ``FORCE=y git push``.

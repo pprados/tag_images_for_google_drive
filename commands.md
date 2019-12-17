@@ -1,5 +1,4 @@
-# Commands
-
+## Make commands
 The Makefile contains the central entry points for common tasks related to this project.
 
 * ``make help`` will print all majors target
@@ -14,12 +13,13 @@ The Makefile contains the central entry points for common tasks related to this 
 * ``make docs`` will create and show a HTML documentation in 'build/'
 * ``make dist`` will create a full wheel distribution
 
-## Twine commands
+### Twine commands
+
 * ``make check-twine`` will check the packaging before publication
 * ``make test-twine`` will publish the package in `test.pypi.org <https://test.pypi.org>`_)
 * ``make twine`` will publish the package in `pypi.org <https://pypi.org>`_)
 
-## Docker commands
+### Docker commands
 * ``make docker-build`` will build the Dockerfile and container
 * ``make docker-run`` will start the container in backgroud and attach the console
 * ``make docker-start`` will start the container in backgroud

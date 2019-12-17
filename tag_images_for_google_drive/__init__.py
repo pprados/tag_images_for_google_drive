@@ -1,5 +1,5 @@
 """
-All machine learning pipeline
+The module
 """
 from typing import List
 
