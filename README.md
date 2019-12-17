@@ -43,6 +43,8 @@ For more informations
 $ tag_images_for_google_drive --help
 ```
 
+or [read the documention](https://tag-images-for-google-drives.readthedocs.io/en/latest/)
+
 To synchronize the google files, you can use differents tools.
 In the proposed Docker image, we use the google-drive-ocamlfuse.
 

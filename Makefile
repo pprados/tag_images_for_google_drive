@@ -11,13 +11,10 @@ SHELL=/bin/bash
 
 ifeq ($(OS),Windows_NT)
     OS := Windows
+	EXE:=.exe
 else
     OS := $(shell sh -c 'uname 2>/dev/null || echo Unknown')
-endif
-ifeq ($(OS),Windows)
-EXE:=.exe
-else
-EXE:=
+	EXE:=
 endif
 ifeq ($(shell uname -r | grep -q Microsoft && echo $$?),0)
 BACKOS=Windows
@@ -553,7 +550,6 @@ Dockerfile: setup.py
 		google-drive-ocamlfuse -headless "/gdrive" && \
 		/usr/sbin/cron -f
 	EOF
-	# TODO RUN echo "* */4 * * *
 
 # WARNING: never publish the container. The Google drive tokens are inside !
 .make-docker-build: Dockerfile dist/$(PRJ)$(EXE) gdfuse/default/state
@@ -597,11 +593,9 @@ docker-volume:
 		--cpus=0.5 --privileged \
 		--cidfile ".cid_docker_daemon" \
 		-v $(PRJ):/cache \
-		-i "$(DOCKER_REPOSITORY)/$(PRJ):latest"
+		"$(DOCKER_REPOSITORY)/$(PRJ):latest"
 	echo -e "$(cyan)Docker daemon started$(normal)"
-	#	--detach \
 
-# TODO: root_folder= cache_directory=
 ## Start a daemon container with the docker image
 docker-start: .cid_docker_daemon
 

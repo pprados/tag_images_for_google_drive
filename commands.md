@@ -21,8 +21,8 @@ The Makefile contains the central entry points for common tasks related to this 
 
 ### Docker commands
 * ``make docker-build`` will build the Dockerfile and container
-* ``make docker-run`` will start the container in backgroud and attach the console
-* ``make docker-start`` will start the container in backgroud
+* ``make docker-run`` will start the container in background and attach the console
+* ``make docker-start`` will start the container in background
 * ``make docker-stop`` will stop the container
 * ``make docker-attach`` will attach the console to the container
 * ``make docker-bash`` will attach a shell in the container
