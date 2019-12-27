@@ -1,6 +1,10 @@
 #!/usr/bin/env make
 
 # WARNING: Use make >4.0
+ifeq ($(shell echo "$(MAKE_VERSION) > 4" | bc -l),0)
+$(error Bad make version, please install make >= 4)
+endif
+
 SHELL=/bin/bash
 .SHELLFLAGS = -e -c
 .ONESHELL:
@@ -14,6 +18,11 @@ ifeq ($(OS),Windows)
 EXE:=.exe
 else
 EXE:=
+endif
+ifeq ($(shell uname -r | grep -q Microsoft && echo $$?),0)
+BACKOS=Windows
+else
+BACKOS=Linux
 endif
 
 NPROC?=$(shell nproc)
@@ -183,8 +192,18 @@ VALIDATE_VENV=$(CHECK_VENV)
 #VALIDATE_VENV=$(ACTIVATE_VENV)
 
 # All dependencies of the project must be here
+
+$(CONDA_PREFIX)/bin/exiftool:
+	conda install -y -c bioconda perl-image-exiftool
+
+$(CONDA_PREFIX)/bin/x86_64-conda_cos6-linux-gnu-gcc:
+	conda install -y -c anaconda make gcc_linux-64 gxx_linux-64
+
+
 .PHONY: requirements dependencies
 REQUIREMENTS=$(PIP_PACKAGE) \
+  $(CONDA_PREFIX)/bin/exiftool \
+  $(CONDA_PREFIX)/bin/x86_64-conda_cos6-linux-gnu-gcc \
 	.gitattributes
 requirements: $(REQUIREMENTS)
 dependencies: requirements
@@ -407,7 +426,11 @@ clean: clean-pyc clean-build
 # Clean all environments
 clean-all: clean remove-venv
 
+ifeq ($(BACKOS),Windows)
+PYTEST_ARGS ?=
+else
 PYTEST_ARGS ?=-n 0
+endif
 
 .PHONY: test unittest functionaltest
 .make-unit-test: $(REQUIREMENTS) $(PYTHON_TST) $(PYTHON_SRC)
@@ -458,12 +481,19 @@ uninstall: $(CONDA_PREFIX)/bin/$(PRJ)
 	rm $(CONDA_PREFIX)/bin/$(PRJ)
 
 
-dist/$(PRJ)$(EXE): .make-validate
+dist/$(PRJ): .make-validate
 	@PYTHONOPTIMIZE=2 && pyinstaller --onefile $(PRJ)/$(PRJ).py
-	touch dist/$(PRJ)$(EXE)
-	echo -e "$(cyan)Executable is here 'dist/$(PRJ)$(EXE)'$(normal)"
+	touch dist/$(PRJ)
+ifeq ($(BACKOS),Windows)
+# Must have conda installed on windows
+	/mnt/c/WINDOWS/system32/cmd.exe /C '%USERPROFILE%\Miniconda3\Scripts\activate.bat tag_images_for_google_drive && pyinstaller --onefile tag_images_for_google_drive/tag_images_for_google_drive.py'
+	touch dist/$(PRJ).exe
+	echo -e "$(cyan)Executable is here 'dist/$(PRJ).exe'$(normal)"
+endif
+	echo -e "$(cyan)Executable is here 'dist/$(PRJ)'$(normal)"
+
 ## Build standalone executable for this OS
-installer: dist/$(PRJ)$(EXE)
+installer: dist/$(PRJ)
 
 
 # Initialize and get a token API
@@ -599,4 +629,3 @@ docker-logs: .cid_docker_daemon
 
 docker-top: .cid_docker_daemon
 	@$(SUDO) docker container top "$(PRJ)"
-

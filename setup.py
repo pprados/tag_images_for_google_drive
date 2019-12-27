@@ -13,7 +13,6 @@ PYTHON_VERSION = "3.7"
 requirements: List[str] = [
     'click', 'click-pathlib',
     'PyExifTool',
-    'PyInstaller',
 ]
 
 setup_requirements: List[str] = ["pytest-runner", "setuptools_scm"]
@@ -33,6 +32,7 @@ dev_requirements: List[str] = [
     'twine',  # To publish package in Pypi
     'sphinx', 'sphinx-execute-code', 'sphinx_rtd_theme', 'recommonmark', 'nbsphinx',  # To generate doc
     'flake8', 'pylint',  # For lint
+    'PyInstaller',
     'daff',
     'mypy',
 ]
