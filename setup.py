@@ -61,6 +61,25 @@ def _git_url() -> str:
 def _git_http_url() -> str:
     return re.sub(r".*@(.*):(.*).git", r"http://\1/\2", _git_url())
 
+# ------------------------
+def find_dirs(dir_name):
+    for dir, dirs, files in os.walk('.'):
+        if dir_name in dirs:
+            yield os.path.relpath(os.path.join(dir, dir_name))
+
+# Find all of the man pages
+# TODO: publish man ?
+def get_man_files():
+    data_files = []
+    man_sections = {}
+    for dir in find_dirs('man'):
+        for file in os.listdir(dir):
+            section = file.split('.')[-1]
+            man_sections[section] = man_sections.get(section, []) + [os.path.join(dir, file)]
+    for section in man_sections:
+        data_files.append(('share/man/man'+section, man_sections[section]))
+    print("MAN="+str(data_files))
+    return data_files
 
 setup(
     name='tag_images_for_google_drive',
@@ -97,7 +116,7 @@ setup(
     package_data={
         "tag_images_for_google_drive": ["py.typed"],
     },
-
+    # TODO data_files=get_man_files(),
     zip_safe=True,
     use_scm_version=True,
     install_requires=requirements,

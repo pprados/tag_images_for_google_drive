@@ -1,9 +1,10 @@
 #!/usr/bin/env make
 
 # WARNING: Use make >4.0
-ifeq ($(shell echo "$(MAKE_VERSION) > 4" | bc -l),0)
+ifeq (0,$(shell echo "$(shell echo "$(MAKE_VERSION)" | sed 's@^[^0-9]*\([0-9]\+\).*@\1@') >= 4" | bc -l))
 $(error Bad make version, please install make >= 4)
 endif
+
 
 SHELL=/bin/bash
 .SHELLFLAGS = -e -c
@@ -593,7 +594,7 @@ docker-volume:
 		--cpus=0.5 --privileged \
 		--cidfile ".cid_docker_daemon" \
 		-v $(PRJ):/cache \
-		"$(DOCKER_REPOSITORY)/$(PRJ):latest"
+		-it "$(DOCKER_REPOSITORY)/$(PRJ):latest"
 	echo -e "$(cyan)Docker daemon started$(normal)"
 
 ## Start a daemon container with the docker image
