@@ -482,9 +482,10 @@ uninstall: $(CONDA_PREFIX)/bin/$(PRJ)
 dist/$(PRJ): .make-validate
 	@PYTHONOPTIMIZE=2 && pyinstaller --onefile $(PRJ)/$(PRJ).py
 	touch dist/$(PRJ)
+	echo "BACKOS=$(BACKOS)"
 ifeq ($(BACKOS),Windows)
-# Must have conda installed on windows
-	/mnt/c/WINDOWS/system32/cmd.exe /C '%USERPROFILE%\Miniconda3\Scripts\activate.bat tag_images_for_google_drive && pyinstaller --onefile tag_images_for_google_drive/tag_images_for_google_drive.py'
+# Must have conda installed on windows with tag_images_for_google_drive env
+	/mnt/c/WINDOWS/system32/cmd.exe /C 'conda activate tag_images_for_google_drive && python setup.py develop && pyinstaller --onefile tag_images_for_google_drive/tag_images_for_google_drive.py'
 	touch dist/$(PRJ).exe
 	echo -e "$(cyan)Executable is here 'dist/$(PRJ).exe'$(normal)"
 endif
