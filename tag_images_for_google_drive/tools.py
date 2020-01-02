@@ -46,7 +46,7 @@ class Glob(click.ParamType):
         Return a ``Path`` from the string ``click`` would have created with
         the given options.
         """
-        if "*" not in value and value[-1] == '/':
+        if "*" not in value and value[-1] in ['/', '\\']:
             value = os.path.join(value, self.default_suffix)
         return [Path(x) for x in
                 glob.glob(super().convert(value=value, param=param, ctx=ctx), recursive=self.recursive)]

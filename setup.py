@@ -12,7 +12,7 @@ PYTHON_VERSION = "3.7"
 # Package for run
 requirements: List[str] = [
     'click', 'click-pathlib',
-    'PyExifTool',
+#    'PyExifTool', current version is incompatible with Windows
 ]
 
 setup_requirements: List[str] = ["pytest-runner", "setuptools_scm"]

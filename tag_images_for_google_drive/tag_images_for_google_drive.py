@@ -13,8 +13,8 @@ from typing import Dict, Tuple, Sequence, Optional, Mapping, AbstractSet, List
 
 import click
 import click_pathlib
-from exiftool import ExifTool
 
+from tag_images_for_google_drive.exiftool import ExifTool
 from tag_images_for_google_drive.tools import Glob, init_logger
 
 LOGGER = logging.getLogger(__name__)
@@ -85,7 +85,6 @@ def _extract_description_and_tags(exif_tool: ExifTool, file: Path) -> Tuple[bool
     """
     metadata = exif_tool.get_tags(["Comment", "Description", "Caption-Abstract", "imageDescription", "Headline",
                                    "Keywords", "Subject"], str(file))
-
     # Extract description with hash tags
     description = _extract_description(metadata)
 
@@ -104,7 +103,6 @@ def _extract_keywords(description, metadata):
     # Limit to 64 chars
     keywords = metadata.get("XMP:Subject")
     if not keywords:
-        LOGGER.debug("Use IPTC:Keywords")
         keywords = metadata.get("IPTC:Keywords", keywords)
         if isinstance(keywords, str):
             if len(keywords) < 63:  # I can trust the keywords tag
@@ -162,7 +160,7 @@ def tag_images_for_google_drive(
 
     if database and database.is_file():
         description_date = database.stat().st_mtime
-        with open(str(database)) as csv_file:
+        with open(str(database), 'rt', encoding='utf-8') as csv_file:
             ref_descriptions = {Path(row[0]): _extract_tags(row[1], '#') for row in csv.reader(csv_file, delimiter=',')}
     else:
         update_descriptions = True
@@ -209,7 +207,7 @@ def _manage_files(exif_tool: ExifTool, input_files, ref_descriptions, update_des
     for file in input_files:
         file = file.absolute()
         rel_file = file.relative_to(Path.cwd())
-        if verbose >= 2:
+        if verbose >= 3:
             LOGGER.debug(f"Inspect {rel_file}...")
         must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
         if must_update:
@@ -229,7 +227,7 @@ def _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_desc
         LOGGER.debug(f"Apply csv file...")
         remove_files = []
         for rel_file, (desc, tags) in ref_descriptions.items():
-            if verbose >= 2:
+            if verbose >= 3:
                 LOGGER.debug(f"Inspect {rel_file}...")
             file = rel_file.absolute()
             if file.is_file():
@@ -286,7 +284,7 @@ def _manage_updated_db(database, dry, ref_descriptions, update_descriptions):
         try:
             LOGGER.debug(f"Update csv file...")
             new_csv_file = database.with_suffix(".csv.tmp")
-            with open(str(new_csv_file), 'w') as f:
+            with open(str(new_csv_file), 'wt', encoding='utf-8',newline='\n') as f:
 
                 writer = csv.writer(f)
                 ref_descriptions = {key: ref_descriptions[key] for key in sorted(ref_descriptions.keys())}
@@ -294,7 +292,8 @@ def _manage_updated_db(database, dry, ref_descriptions, update_descriptions):
                     str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
                     description = description.strip()
                     description_and_tags = f"{description} {str_tags}" if len(description) > 0 else str_tags
-                    writer.writerow([str(path), description_and_tags])
+                    if len(str(path)):
+                        writer.writerow([str(path), description_and_tags])
                 f.flush()
             # Commit change
             if database.is_file():
@@ -375,10 +374,8 @@ def main(  # pylint: disable=C0103
     """
     try:
         level_mapping = [logging.WARN, logging.INFO, logging.DEBUG]
-        if verbose >= len(level_mapping):
-            verbose = len(level_mapping) - 1
 
-        init_logger(LOGGER, level_mapping[verbose])
+        init_logger(LOGGER, level_mapping[min(verbose, len(level_mapping) - 1)])
 
         if not db:
             from_files = True

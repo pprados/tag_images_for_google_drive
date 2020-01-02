@@ -5,7 +5,7 @@
 import unittest
 from pathlib import Path
 
-from exiftool import ExifTool
+from tag_images_for_google_drive.exiftool import ExifTool
 
 # noinspection PyProtectedMember
 from tag_images_for_google_drive.tag_images_for_google_drive import _extract_tags, _extract_description_and_tags, \
