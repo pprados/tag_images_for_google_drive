@@ -66,9 +66,9 @@ from json import JSONDecodeError
 
 LOGGER = logging.getLogger(__name__)
 
-#try:  # Py3k compatibility
+# try:  # Py3k compatibility
 #    BASESTRING=(bytes, str)
-#except NameError:
+# except NameError:
 #    BASESTRING = (bytes, str)
 from typing import Optional, Tuple, Type, Dict, Any, Set
 
@@ -85,7 +85,7 @@ If the executable is not located in one of the paths listed in the
 
 # SENTINEL indicating the end of the output of a sequence of commands.
 # The standard value should be fine.
-SENTINEL = b"{ready}"
+SENTINEL = "{ready}"
 
 # The block size when reading from exiftool.  The standard value
 # should be fine, though other values might give better performance in
@@ -97,7 +97,7 @@ BLOCK_SIZE = 4096
 # (sha1 265e36e277f3)
 def _fscodec():
     encoding = sys.getfilesystemencoding()
-    #encoding = "cp850"
+    # encoding = "cp850"
     errors = "strict"
     if encoding != "mbcs":
         try:
@@ -113,7 +113,8 @@ def _fscodec():
         handler, return bytes unchanged. On Windows, use 'strict' error handler if
         the file system encoding is 'mbcs' (which is the default encoding).
         """
-        return filename if isinstance(filename, bytes) else filename.encode(encoding, errors)
+        #       return filename if isinstance(filename, bytes) else filename.encode(encoding, errors)
+        return filename
 
     return fs_encode
 
@@ -158,7 +159,7 @@ class ExifTool:
        associated with a running subprocess.
     """
 
-    def __init__(self, executable: Optional[str]=EXECUTABLE_):
+    def __init__(self, executable: Optional[str] = EXECUTABLE_):
         self.executable = executable
         self.running = False
         self._process = None
@@ -179,8 +180,10 @@ class ExifTool:
                 [self.executable, "-stay_open", "True", "-@", "-",
                  "-common_args", "-G", "-n"],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=devnull)
-            self._process.stdin.write(b'\xff\xfe')  # Force UTF-8
+                stderr=devnull,
+                encoding="utf-8",
+                text=True)
+            # self._process.stdin.write(b'\xff\xfe')  # Force UTF-8
         self.running = True
 
     def terminate(self) -> None:
@@ -190,7 +193,7 @@ class ExifTool:
         """
         if not self.running:
             return
-        self._process.stdin.write(b"-stay_open\nFalse\n")
+        self._process.stdin.write("-stay_open\nFalse\n")
         self._process.stdin.flush()
         self._process.communicate()
         del self._process
@@ -228,12 +231,12 @@ class ExifTool:
         """
         if not self.running:
             raise ValueError("ExifTool instance not running.")
-        self._process.stdin.write(b"\n".join(params + (b"-execute\n",)))
+        self._process.stdin.write("\n".join(params + ("-execute\n",)))
         self._process.stdin.flush()
-        output = b""
+        output = ""
         fd = self._process.stdout.fileno()
         while not output[-32:].strip().endswith(SENTINEL):
-            output += os.read(fd, BLOCK_SIZE)
+            output += str(os.read(fd, BLOCK_SIZE), "UTF-8")
         return output.strip()[:-len(SENTINEL)]
 
     def execute_json(self, *params: bytearray) -> Dict[str, Any]:
@@ -259,7 +262,7 @@ class ExifTool:
         as Unicode strings in Python 3.x.
         """
         params = map(FS_ENCODE, params)
-        return json.loads(self.execute(b"-j", *params).decode("utf-8"))
+        return json.loads(self.execute("-j", *params))
 
     def get_metadata_batch(self, filenames: str) -> Dict[str, Any]:
         """Return all meta-data for the given files.
@@ -277,7 +280,7 @@ class ExifTool:
         """
         return self.execute_json(filename)[0]
 
-    def get_tags_batch(self, tags, filenames: str) -> Set[Dict[str, Any]]:
+    def get_tags_batch(self, tags, filenames: Set[str]) -> Set[Dict[str, Any]]:
         """Return only specified tags for the given files.
 
         The first argument is an iterable of tags.  The tag names may
@@ -297,13 +300,23 @@ class ExifTool:
             raise TypeError("The argument 'filenames' must be "
                             "an iterable of strings")
         params = ["-" + t for t in tags]
-        params.extend(filenames)
         try:
-            return self.execute_json(*params)
-        except JSONDecodeError:
-            LOGGER.warning(f"Can not manage filename {filenames} with unicode on Windows")
-            return [{}]
-
+            # Check if only ascii filename
+            filenames[0].encode("ascii")
+            params.extend(filenames)
+            try:
+                return self.execute_json(*params)
+            except JSONDecodeError:
+                LOGGER.warning(f"Can not manage filename {filenames} with unicode on Windows")
+                return [{}]
+        except UnicodeEncodeError:
+            # Work around **params
+            # p=subprocess.run(self.executable, *params, capture_output=True, encoding="UTF-8")
+            params.insert(0, filenames[0])
+            params.insert(0, "-json")
+            params.insert(0, self.executable)
+            p = subprocess.run(params, capture_output=True, encoding="UTF-8")
+            return json.loads(p.stdout)
 
     def get_tags(self, tags, filename: str) -> Dict[str, Any]:
         """Return only specified tags for a single file.
