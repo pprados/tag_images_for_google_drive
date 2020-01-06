@@ -12,7 +12,6 @@ PYTHON_VERSION = "3.7"
 # Package for run
 requirements: List[str] = [
     'click', 'click-pathlib',
-#    'PyExifTool', current version is incompatible with Windows
 ]
 
 setup_requirements: List[str] = ["pytest-runner", "setuptools_scm"]
@@ -78,7 +77,6 @@ def get_man_files():
             man_sections[section] = man_sections.get(section, []) + [os.path.join(dir, file)]
     for section in man_sections:
         data_files.append(('share/man/man'+section, man_sections[section]))
-    print("MAN="+str(data_files))
     return data_files
 
 setup(

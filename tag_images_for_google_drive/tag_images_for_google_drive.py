@@ -284,7 +284,7 @@ def _manage_updated_db(database, dry, ref_descriptions, update_descriptions):
         try:
             LOGGER.debug(f"Update csv file...")
             new_csv_file = database.with_suffix(".csv.tmp")
-            with open(str(new_csv_file), 'wt', encoding='utf-8',newline='\n') as f:
+            with open(str(new_csv_file), 'wt', encoding='utf-8', newline='\n') as f:
 
                 writer = csv.writer(f)
                 ref_descriptions = {key: ref_descriptions[key] for key in sorted(ref_descriptions.keys())}
@@ -292,13 +292,13 @@ def _manage_updated_db(database, dry, ref_descriptions, update_descriptions):
                     str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
                     description = description.strip()
                     description_and_tags = f"{description} {str_tags}" if len(description) > 0 else str_tags
-                    if len(str(path)):
+                    if not str(path):
                         writer.writerow([str(path), description_and_tags])
-                f.flush()
-            # Commit change
-            if database.is_file():
-                database.unlink()
-            new_csv_file.rename(database)
+                    f.flush()
+                    # Commit change
+                    if database.is_file():
+                        database.unlink()
+                    new_csv_file.rename(database)
         finally:
             if new_csv_file.is_file():
                 new_csv_file.unlink()

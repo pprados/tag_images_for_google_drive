@@ -53,16 +53,13 @@ Example usage::
                                          d["EXIF:DateTimeOriginal"]))
 """
 
-from __future__ import unicode_literals
-
 import logging
-import sys
 import subprocess
 import os
 import json
 import warnings
-import codecs
 from json import JSONDecodeError
+from typing import Optional, Tuple, Type, Dict, Any, Set
 
 LOGGER = logging.getLogger(__name__)
 
@@ -70,9 +67,6 @@ LOGGER = logging.getLogger(__name__)
 #    BASESTRING=(bytes, str)
 # except NameError:
 #    BASESTRING = (bytes, str)
-from typing import Optional, Tuple, Type, Dict, Any, Set
-
-from exiftool import ExifTool
 
 BASESTRING = (bytes, str)
 
@@ -95,32 +89,32 @@ BLOCK_SIZE = 4096
 
 # This code has been adapted from Lib/os.py in the Python source tree
 # (sha1 265e36e277f3)
-def _fscodec():
-    encoding = sys.getfilesystemencoding()
-    # encoding = "cp850"
-    errors = "strict"
-    if encoding != "mbcs":
-        try:
-            codecs.lookup_error("surrogateescape")
-        except LookupError:
-            pass
-        else:
-            errors = "surrogateescape"
+# def _fscodec():
+#     encoding = sys.getfilesystemencoding()
+#     # encoding = "cp850"
+#     errors = "strict"
+#     if encoding != "mbcs":
+#         try:
+#             codecs.lookup_error("surrogateescape")
+#         except LookupError:
+#             pass
+#         else:
+#             errors = "surrogateescape"
+#
+#     def fs_encode(filename):
+#         """
+#         Encode filename to the filesystem encoding with 'surrogateescape' error
+#         handler, return bytes unchanged. On Windows, use 'strict' error handler if
+#         the file system encoding is 'mbcs' (which is the default encoding).
+#         """
+#         #       return filename if isinstance(filename, bytes) else filename.encode(encoding, errors)
+#         return filename
+#
+#     return fs_encode
 
-    def fs_encode(filename):
-        """
-        Encode filename to the filesystem encoding with 'surrogateescape' error
-        handler, return bytes unchanged. On Windows, use 'strict' error handler if
-        the file system encoding is 'mbcs' (which is the default encoding).
-        """
-        #       return filename if isinstance(filename, bytes) else filename.encode(encoding, errors)
-        return filename
 
-    return fs_encode
-
-
-FS_ENCODE = _fscodec()
-del _fscodec
+# FS_ENCODE = _fscodec()
+# del _fscodec
 
 
 class ExifTool:
@@ -199,7 +193,7 @@ class ExifTool:
         del self._process
         self.running = False
 
-    def __enter__(self) -> ExifTool:
+    def __enter__(self) -> 'ExifTool':
         self.start()
         return self
 
@@ -261,7 +255,8 @@ class ExifTool:
         respective Python version – as raw strings in Python 2.x and
         as Unicode strings in Python 3.x.
         """
-        params = map(FS_ENCODE, params)
+        # params = map(FS_ENCODE, params)
+        params = {}
         return json.loads(self.execute("-j", *params))
 
     def get_metadata_batch(self, filenames: str) -> Dict[str, Any]:
@@ -315,7 +310,7 @@ class ExifTool:
             params.insert(0, filenames[0])
             params.insert(0, "-json")
             params.insert(0, self.executable)
-            p = subprocess.run(params, capture_output=True, encoding="UTF-8")
+            p = subprocess.run(params, capture_output=True, encoding="UTF-8", check=True)
             return json.loads(p.stdout)
 
     def get_tags(self, tags, filename: str) -> Dict[str, Any]:
