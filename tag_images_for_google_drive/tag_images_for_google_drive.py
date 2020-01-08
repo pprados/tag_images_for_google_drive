@@ -28,9 +28,9 @@ def _set_tags(exif_tool: ExifTool, meta_info: Mapping[str, str], file: Path) -> 
        :param meta_info: A dictionary of meta info
        :param file: The filename
     """
-    params = [bytearray("-" + key + "=" + val, "UTF-8") for key, val in meta_info.items()]
-    params.append(bytearray(str("-overwrite_original"), "UTF-8"))
-    params.append(bytearray(str(file), "UTF-8"))
+    params = ["-" + key + "=" + val for key, val in meta_info.items()]
+    params.append("-overwrite_original")
+    params.append(str(file))
     exif_tool.execute(*params)
 
 

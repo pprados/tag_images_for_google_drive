@@ -26,7 +26,7 @@ single instance needs to be launched and can be reused for many
 queries.  This is much more efficient than launching a separate
 process for every single query.
 
-.. _ExifTool: http://www.sno.phy.queensu.ca/~phil/exiftool/
+.. _ExifTool: https://exiftool.org/
 
 The source code can be checked out from the github repository with
 
@@ -37,7 +37,7 @@ The source code can be checked out from the github repository with
 Alternatively, you can download a tarball_.  There haven't been any
 releases yet.
 
-.. _tarball: https://github.com/smarnach/pyexiftool/tarball/master
+.. _tarball:  https://codeload.github.com/smarnach/pyexiftool/legacy.tar.gz/master
 
 PyExifTool is licenced under GNU GPL version 3 or later.
 
@@ -52,14 +52,13 @@ Example usage::
         print("{:20.20} {:20.20}".format(d["SourceFile"],
                                          d["EXIF:DateTimeOriginal"]))
 """
-
 import logging
 import subprocess
 import os
 import json
 import warnings
 from json import JSONDecodeError
-from typing import Optional, Tuple, Type, Dict, Any, Set
+from typing import Optional, Tuple, Type, Dict, Any, List
 
 LOGGER = logging.getLogger(__name__)
 
@@ -89,32 +88,31 @@ BLOCK_SIZE = 4096
 
 # This code has been adapted from Lib/os.py in the Python source tree
 # (sha1 265e36e277f3)
-# def _fscodec():
-#     encoding = sys.getfilesystemencoding()
-#     # encoding = "cp850"
-#     errors = "strict"
-#     if encoding != "mbcs":
-#         try:
-#             codecs.lookup_error("surrogateescape")
-#         except LookupError:
-#             pass
-#         else:
-#             errors = "surrogateescape"
-#
-#     def fs_encode(filename):
-#         """
-#         Encode filename to the filesystem encoding with 'surrogateescape' error
-#         handler, return bytes unchanged. On Windows, use 'strict' error handler if
-#         the file system encoding is 'mbcs' (which is the default encoding).
-#         """
-#         #       return filename if isinstance(filename, bytes) else filename.encode(encoding, errors)
-#         return filename
-#
-#     return fs_encode
+def _fscodec():
+    # encoding = sys.getfilesystemencoding()
+    # errors = "strict"
+    # if encoding != "mbcs":
+    #     try:
+    #         codecs.lookup_error("surrogateescape")
+    #     except LookupError:
+    #         pass
+    #     else:
+    #         errors = "surrogateescape"
+
+    def fs_encode(filename):
+        """
+        Encode filename to the filesystem encoding with 'surrogateescape' error
+        handler, return bytes unchanged. On Windows, use 'strict' error handler if
+        the file system encoding is 'mbcs' (which is the default encoding).
+        """
+        # return filename if isinstance(filename, bytes) else filename.encode(encoding, errors)
+        return filename
+
+    return fs_encode
 
 
-# FS_ENCODE = _fscodec()
-# del _fscodec
+FS_ENCODE = _fscodec()
+del _fscodec
 
 
 class ExifTool:
@@ -153,10 +151,10 @@ class ExifTool:
        associated with a running subprocess.
     """
 
-    def __init__(self, executable: Optional[str] = EXECUTABLE_):
-        self.executable = executable
-        self.running = False
-        self._process = None
+    def __init__(self, executable: str = EXECUTABLE_):
+        self.executable: str = executable
+        self.running: bool = False
+        self._process: Optional[subprocess.Popen] = None
 
     def start(self) -> None:
         """Start an ``exiftool`` process in batch mode for this instance.
@@ -175,9 +173,9 @@ class ExifTool:
                  "-common_args", "-G", "-n"],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                 stderr=devnull,
-                encoding="utf-8",
-                text=True)
-            # self._process.stdin.write(b'\xff\xfe')  # Force UTF-8
+                # encoding="utf-8",
+                text=True
+            )
         self.running = True
 
     def terminate(self) -> None:
@@ -187,10 +185,11 @@ class ExifTool:
         """
         if not self.running:
             return
-        self._process.stdin.write("-stay_open\nFalse\n")
-        self._process.stdin.flush()
-        self._process.communicate()
-        del self._process
+        if self._process:
+            self._process.stdin.write("-stay_open\nFalse\n")
+            self._process.stdin.flush()
+            self._process.communicate()
+            self._process = None
         self.running = False
 
     def __enter__(self) -> 'ExifTool':
@@ -204,7 +203,7 @@ class ExifTool:
     def __del__(self) -> None:
         self.terminate()
 
-    def execute(self, *params: bytearray) -> str:
+    def execute(self, *params: str) -> str:
         """Execute the given batch of parameters with ``exiftool``.
 
         This method accepts any number of parameters and sends them to
@@ -223,7 +222,7 @@ class ExifTool:
         .. note:: This is considered a low-level method, and should
            rarely be needed by application developers.
         """
-        if not self.running:
+        if not self.running or not self._process:
             raise ValueError("ExifTool instance not running.")
         self._process.stdin.write("\n".join(params + ("-execute\n",)))
         self._process.stdin.flush()
@@ -233,7 +232,7 @@ class ExifTool:
             output += str(os.read(fd, BLOCK_SIZE), "UTF-8")
         return output.strip()[:-len(SENTINEL)]
 
-    def execute_json(self, *params: bytearray) -> Dict[str, Any]:
+    def execute_json(self, *params: str) -> List[Dict[str, Any]]:
         """Execute the given batch of parameters and parse the JSON output.
 
         This method is similar to :py:meth:`execute()`.  It
@@ -255,11 +254,9 @@ class ExifTool:
         respective Python version – as raw strings in Python 2.x and
         as Unicode strings in Python 3.x.
         """
-        # params = map(FS_ENCODE, params)
-        params = {}
-        return json.loads(self.execute("-j", *params))
+        return json.loads(self.execute("-j", *map(FS_ENCODE, params)))
 
-    def get_metadata_batch(self, filenames: str) -> Dict[str, Any]:
+    def get_metadata_batch(self, filenames: List[str]) -> List[Dict[str, Any]]:
         """Return all meta-data for the given files.
 
         The return value will have the format described in the
@@ -275,7 +272,7 @@ class ExifTool:
         """
         return self.execute_json(filename)[0]
 
-    def get_tags_batch(self, tags, filenames: Set[str]) -> Set[Dict[str, Any]]:
+    def get_tags_batch(self, tags, filenames: List[str]) -> List[Dict[str, Any]]:
         """Return only specified tags for the given files.
 
         The first argument is an iterable of tags.  The tag names may
@@ -321,7 +318,7 @@ class ExifTool:
         """
         return self.get_tags_batch(tags, [filename])[0]
 
-    def get_tag_batch(self, tag, filenames: str) -> Dict[str, Any]:
+    def get_tag_batch(self, tag, filenames: List[str]) -> List[Any]:
         """Extract a single tag from the given files.
 
         The first argument is a single tag name, as usual in the
@@ -339,7 +336,7 @@ class ExifTool:
             result.append(next(iter(d.values()), None))
         return result
 
-    def get_tag(self, tag: str, filename: str) -> Dict[str, Any]:
+    def get_tag(self, tag: str, filename: str) -> List[Any]:
         """Extract a single tag from a single file.
 
         The return value is the value of the specified tag, or
