@@ -2,12 +2,12 @@
 
 ## Motivation
 Synchronize a CSV database and PNG/JPEG files to add #hashtag in image description.
-Then, you can synchronize all files with Google drive.
+Then, you can synchronize all files with Google drive and search image with *tags*.
 
 ## Synopsis
 Google drive use only the description meta-data to index an image.
 After this synchronisation it's possible to search an image with
-"`type:image a_hash_tag`".
+"`type:image a_hashtag`".
 ```
 type:image apple
 ```
@@ -17,6 +17,7 @@ This tool use [Exiftool](https://github.com/exiftool/exiftool)
 $ sudo apt-get install exiftool        # Debian
 $ sudo brew install exiftool           # Mac
 $ sudo yum install perl-Image-ExifTool # CentOS
+...
 ...
 ```
 
@@ -46,7 +47,7 @@ $ tag_images_for_google_drive --help
 or [read the documention](https://tag-images-for-google-drives.readthedocs.io/en/latest/)
 
 To synchronize the google files, you can use differents tools.
-In the proposed Docker image, we use the google-drive-ocamlfuse.
+In the proposed Docker image, we use the `google-drive-ocamlfuse`.
 
 ## The latest version
 Clone the git repository (see upper button)
@@ -63,7 +64,7 @@ $ tag_images_for_google_drive --help
 ```
 
 ### Installation from PIP
-- In virtualenv, conda env, use
+- In virtualenv or conda env, use
 ```shell
 $ pip install tag_images_for_google_drive
 ```

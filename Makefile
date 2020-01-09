@@ -192,16 +192,21 @@ VALIDATE_VENV=$(CHECK_VENV)
 # All dependencies of the project must be here
 
 $(CONDA_PREFIX)/bin/exiftool:
-	conda install -y -c bioconda perl-image-exiftool
+	@conda install -y -c bioconda perl-image-exiftool
 
-$(CONDA_PREFIX)/bin/gcc:
-	conda install -y -c anaconda make gcc
+ifeq ($(OS),Darwin)
+GCC=gcc
+else
+GCC=gcc_linux-64
+endif
+$(CONDA_PREFIX)/bin/$(GCC):
+	@conda install -y -c anaconda make $(GCC)
 
 
 .PHONY: requirements dependencies
 REQUIREMENTS=$(PIP_PACKAGE) \
   $(CONDA_PREFIX)/bin/exiftool \
-  $(CONDA_PREFIX)/bin/gcc \
+  $(CONDA_PREFIX)/bin/$(GCC) \
 	.gitattributes
 requirements: $(REQUIREMENTS)
 dependencies: requirements
