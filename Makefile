@@ -1,7 +1,7 @@
 #!/usr/bin/env make
 
 # WARNING: Use make >4.0
-ifeq (0,$(shell echo "$(shell echo "$(MAKE_VERSION)" | sed 's@^[^0-9]*\([0-9]\+\).*@\1@') >= 4" | bc -l))
+ifeq (0,$(shell echo "$(shell echo "$(MAKE_VERSION)" | sed -E 's/^([0-9]+).*/\1/') >= 4" | bc -l))
 $(error Bad make version, please install make >= 4)
 endif
 
@@ -20,7 +20,7 @@ endif
 ifeq ($(shell uname -r | grep -q Microsoft && echo $$?),0)
 BACKOS=Windows
 else
-BACKOS=Linux
+BACKOS=$(OS)
 endif
 
 NPROC?=$(shell nproc)
@@ -194,14 +194,14 @@ VALIDATE_VENV=$(CHECK_VENV)
 $(CONDA_PREFIX)/bin/exiftool:
 	conda install -y -c bioconda perl-image-exiftool
 
-$(CONDA_PREFIX)/bin/x86_64-conda_cos6-linux-gnu-gcc:
-	conda install -y -c anaconda make gcc_linux-64 gxx_linux-64
+$(CONDA_PREFIX)/bin/gcc:
+	conda install -y -c anaconda make gcc
 
 
 .PHONY: requirements dependencies
 REQUIREMENTS=$(PIP_PACKAGE) \
   $(CONDA_PREFIX)/bin/exiftool \
-  $(CONDA_PREFIX)/bin/x86_64-conda_cos6-linux-gnu-gcc \
+  $(CONDA_PREFIX)/bin/gcc \
 	.gitattributes
 requirements: $(REQUIREMENTS)
 dependencies: requirements
@@ -296,10 +296,10 @@ typing: .make-typing
 
 ## Add infered typing in module
 add-typing: typing
-	@find -L $(PRJ) -type f -name '*.py' -exec merge-pyi -i {} .pytype/pyi/{}i \;
+	@find $(PRJ) -type f -name '*.py' -exec merge-pyi -i {} .pytype/pyi/{}i \;
 	for phase in scripts/*
 	do
-	  ( cd $$phase ; find -L . -type f -name '*.py' -exec merge-pyi -i {} .pytype/pyi/{}i \; )
+	  ( cd $$phase ; find . -type f -name '*.py' -exec merge-pyi -i {} .pytype/pyi/{}i \; )
 	done
 
 
@@ -388,16 +388,16 @@ endif
 .PHONY: clean-pyc
 # Clean pre-compiled files
 clean-pyc:
-	@/usr/bin/find -L . -type f -name "*.py[co]" -delete
-	@/usr/bin/find -L . -type d -name "__pycache__" -delete
+	@/usr/bin/find . -type f -name "*.py[co]" -delete
+	@/usr/bin/find . -type d -name "__pycache__" -delete
 
 .PHONY: clean-build
 # Remove build artifacts and docs
 clean-build:
-	@/usr/bin/find -L . -type f -name ".make-*" -delete
 	@rm -fr build/
 	@rm -fr dist/*
 	@rm -fr *.egg-info
+	@/usr/bin/find . -type f -name ".make-*" -delete
 	@echo -e "$(cyan)Build cleaned$(normal)"
 
 
@@ -418,7 +418,7 @@ clean-venv : clean-$(VENV)
 
 .PHONY: clean
 ## Clean current environment
-clean: clean-pyc clean-build
+clean: clean-build clean-pyc
 
 .PHONY: clean-all
 # Clean all environments
@@ -479,8 +479,11 @@ uninstall: $(CONDA_PREFIX)/bin/$(PRJ)
 	rm $(CONDA_PREFIX)/bin/$(PRJ)
 
 
+ifeq ($(OS),Darwin)
+PYINSTALLER_OPT=--hiddenimport _sysconfigdata_m_darwin_darwin
+endif
 dist/$(PRJ): .make-validate
-	@PYTHONOPTIMIZE=2 && pyinstaller --onefile $(PRJ)/$(PRJ).py
+	@PYTHONOPTIMIZE=2 && pyinstaller $(PYINSTALLER_OPT) --onefile $(PRJ)/$(PRJ).py
 	touch dist/$(PRJ)
 ifeq ($(BACKOS),Windows)
 # Must have conda installed on windows with tag_images_for_google_drive env
@@ -488,7 +491,12 @@ ifeq ($(BACKOS),Windows)
 	touch dist/$(PRJ).exe
 	echo -e "$(cyan)Executable is here 'dist/$(PRJ).exe'$(normal)"
 endif
+ifeq ($(OS),Darwin)
+	ln -f "dist/$(PRJ)" "dist/$(PRJ).macos"
+	echo -e "$(cyan)Executable is here 'dist/$(PRJ).macos'$(normal)"
+else
 	echo -e "$(cyan)Executable is here 'dist/$(PRJ)'$(normal)"
+endif
 
 ## Build standalone executable for this OS
 installer: dist/$(PRJ)

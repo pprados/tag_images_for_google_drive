@@ -412,4 +412,4 @@ def main(  # pylint: disable=C0103
 
 
 if __name__ == '__main__':
-    sys.exit(main())  # pylint: disable=E1120
+    sys.exit(main(standalone_mode=False))  # pylint: disable=E1120,E1123
