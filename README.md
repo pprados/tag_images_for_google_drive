@@ -39,6 +39,12 @@ $ tag_images_for_google_drive -v --from-db   --db descriptions.csv '**/*.png' '*
 $ tag_images_for_google_drive -v --from-file --db descriptions.csv '**/*.png' '**/*.jpg'
 ```
 
+To add a specific tag for all images in a directory, add it in command line.
+```shell
+$ tag_images_for_google_drive -v --db descriptions.csv -t myimages '**/*.png' '**/*.jpg'
+```
+The, you can filter theses specifics images with `type:image myimages ...`.
+
 For more informations
 ```shell
 $ tag_images_for_google_drive --help
@@ -46,7 +52,7 @@ $ tag_images_for_google_drive --help
 
 or [read the documention](https://tag-images-for-google-drives.readthedocs.io/en/latest/)
 
-To synchronize the google files, you can use differents tools.
+To synchronize the google files, you can use different tools.
 In the proposed Docker image, we use the `google-drive-ocamlfuse`.
 
 ## The latest version

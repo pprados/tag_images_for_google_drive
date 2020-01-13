@@ -9,7 +9,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Dict, Tuple, Sequence, Optional, Mapping, AbstractSet, List
+from typing import Dict, Tuple, Sequence, Optional, Mapping, AbstractSet, List, Set
 
 import click
 import click_pathlib
@@ -75,7 +75,7 @@ def _extract_description(metadata: Mapping[str, str]) -> str:
     return description
 
 
-def _extract_description_and_tags(exif_tool: ExifTool, file: Path) -> Tuple[bool, str, Sequence[str]]:
+def _extract_description_and_tags(exif_tool: ExifTool, file: Path) -> Tuple[bool, str, List[str]]:
     """
        Extract description and tags from image file.
 
@@ -133,6 +133,7 @@ def _extract_keywords(description, metadata):
 def tag_images_for_google_drive(
         input_files: AbstractSet[Path],
         database: Optional[Path],
+        extra_tags: Optional[Set[str]],
         tag_file: Optional[Path] = None,
         from_files: bool = False,
         from_db: bool = False,
@@ -152,10 +153,13 @@ def tag_images_for_google_drive(
     merge = not from_db and not from_files
     assert not ((from_db or merge) and not database)
 
-    updated_files: Dict[Path, Tuple[str, Sequence[str]]] = {}  # Files to update
+    if not extra_tags:
+        extra_tags = set([])
+
+    updated_files: Dict[Path, Tuple[str, List[str]]] = {}  # Files to update
 
     update_descriptions = False
-    ref_descriptions: Dict[Path, Tuple[str, Sequence[str]]] = {}
+    ref_descriptions: Dict[Path, Tuple[str, List[str]]] = {}
     description_date = 0.0
 
     if database and database.is_file():
@@ -170,12 +174,25 @@ def tag_images_for_google_drive(
 
     with ExifTool() as exif_tool:
         # 1. Update images files
-        update_descriptions = _manage_files(exif_tool, input_files, ref_descriptions, update_descriptions,
-                                            updated_files, verbose)
+        update_descriptions = _manage_files(exif_tool,
+                                            input_files,
+                                            ref_descriptions,
+                                            extra_tags,
+                                            update_descriptions,
+                                            updated_files,
+                                            verbose)
 
         # 2. Apply the descriptions file
-        update_descriptions = _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_descriptions,
-                                         update_descriptions, updated_files, verbose)
+        update_descriptions = _manage_db(exif_tool,
+                                         description_date,
+                                         from_db,
+                                         from_files,
+                                         merge,
+                                         ref_descriptions,
+                                         extra_tags,
+                                         update_descriptions,
+                                         updated_files,
+                                         verbose)
 
         # 3. Apply update files
         _manage_updated_files(exif_tool, dry, updated_files)
@@ -202,7 +219,13 @@ def tag_images_for_google_drive(
     return ref_descriptions, updated_files
 
 
-def _manage_files(exif_tool: ExifTool, input_files, ref_descriptions, update_descriptions, updated_files, verbose=0):
+def _manage_files(exif_tool: ExifTool,
+                  input_files: AbstractSet[Path],
+                  ref_descriptions: Dict[Path, Tuple[str, List[str]]],
+                  extratags: Set[str],
+                  update_descriptions: bool,
+                  updated_files: Dict[Path, Tuple[str, List[str]]],
+                  verbose: int = 0):
     LOGGER.debug("Update images...")
     for file in input_files:
         file = file.absolute()
@@ -210,6 +233,9 @@ def _manage_files(exif_tool: ExifTool, input_files, ref_descriptions, update_des
         if verbose >= 3:
             LOGGER.debug(f"Inspect {rel_file}...")
         must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
+        if not set(extratags).issubset(keywords):
+            must_update = True
+            keywords.extend(extratags)
         if must_update:
             update_descriptions = True
             updated_files[file] = (description, keywords)
@@ -221,8 +247,16 @@ def _manage_files(exif_tool: ExifTool, input_files, ref_descriptions, update_des
     return update_descriptions
 
 
-def _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_descriptions, update_descriptions,
-               updated_files, verbose=0):
+def _manage_db(exif_tool: ExifTool,
+               description_date: float,
+               from_db: bool,
+               from_files: bool,
+               merge: bool,
+               ref_descriptions: Dict[Path, Tuple[str, List[str]]],
+               extratags: Set[str],
+               update_descriptions: bool,
+               updated_files: Dict[Path, Tuple[str, List[str]]],
+               verbose: int = 0):
     if not from_files:
         LOGGER.debug(f"Apply csv file...")
         remove_files = []
@@ -235,12 +269,15 @@ def _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_desc
                 must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
                 if not keywords:
                     LOGGER.warning(f"{file.relative_to(Path.cwd())} has not tags")
+                if not set(extratags).issubset(keywords):
+                    tags.extend(extratags)
+                    tags = sorted(tags)
                 if must_update:
                     updated_files[file] = (description, keywords)
                 if from_db and (must_update or desc != description or tags != keywords):
                     LOGGER.debug(f"Refresh file '{file}'")
                     updated_files[file] = (desc, tags)
-                elif file not in updated_files and (must_update or desc != description or tags != keywords):
+                elif (must_update or desc != description or tags != keywords):
                     update_descriptions = _manage_file_and_db(desc, description, description_date, file, file_date,
                                                               from_db, keywords, merge, ref_descriptions, rel_file,
                                                               tags, update_descriptions, updated_files)
@@ -254,7 +291,9 @@ def _manage_db(exif_tool, description_date, from_db, from_files, merge, ref_desc
     return update_descriptions
 
 
-def _manage_updated_files(exif_tools, dry, updated_files):
+def _manage_updated_files(exif_tools: ExifTool,
+                          dry: bool,
+                          updated_files: Dict[Path, Tuple[str, List[str]]]) -> None:
     LOGGER.debug(f"Update identified files in csv ...")
     for file, (description, keywords) in updated_files.items():
         str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
@@ -279,7 +318,10 @@ def _manage_updated_files(exif_tools, dry, updated_files):
                           file)
 
 
-def _manage_updated_db(database, dry, ref_descriptions, update_descriptions):
+def _manage_updated_db(database: Optional[Path],
+                       dry: bool,
+                       ref_descriptions: Dict[Path, Tuple[str, List[str]]],
+                       update_descriptions: bool):
     if database and not dry and update_descriptions:
         try:
             LOGGER.debug(f"Update csv file...")
@@ -304,12 +346,22 @@ def _manage_updated_db(database, dry, ref_descriptions, update_descriptions):
                 new_csv_file.unlink()
 
 
-def _manage_file_and_db(desc, description, description_date, file, file_date, from_db, keywords, merge,
-                        # pylint: disable=R0913
-                        ref_descriptions, rel_file, tags, update_descriptions, updated_files):
+def _manage_file_and_db(desc: str,  # pylint: disable=R0913
+                        description: str,
+                        description_date: float,
+                        file: Path,
+                        file_date: float,
+                        from_db: bool,
+                        keywords: List[str],
+                        merge: bool,
+                        ref_descriptions: Dict[Path, Tuple[str, List[str]]],
+                        rel_file: Path,
+                        tags: List[str],
+                        update_descriptions: bool,
+                        updated_files: Dict[Path, Tuple[str, List[str]]]):
     if from_db:
         updated_files[file] = (desc, tags)
-    elif file not in updated_files:
+    else:
         if merge:
             new_tags = sorted(set(tags).union(keywords))
             if new_tags != keywords:
@@ -328,7 +380,8 @@ def _manage_file_and_db(desc, description, description_date, file, file_date, fr
             if file_date > description_date and desc != "":
                 desc = description
                 update_descriptions = True
-                ref_descriptions[rel_file] = (desc, tags)
+                ref_descriptions[rel_file] = (desc, new_tags)
+                updated_files[file] = (desc, new_tags)
                 LOGGER.debug(
                     f"{'Update' if rel_file in ref_descriptions else 'Add'} "
                     f"in csv file '{rel_file}'")
@@ -341,6 +394,7 @@ def _manage_file_and_db(desc, description, description_date, file, file_date, fr
                 f"{'Update' if rel_file in ref_descriptions else 'Add'} "
                 f"in csv file '{rel_file}'")
             ref_descriptions[rel_file] = (desc, tags)
+            updated_files[file] = (desc, new_tags)
         LOGGER.debug(f"Refresh file '{file}' with {tags}")
         updated_files[file] = (desc, tags)
     return update_descriptions
@@ -351,6 +405,7 @@ def _manage_file_and_db(desc, description, description_date, file, file_date, fr
 @click.option("--db", metavar='<csv file>', type=click_pathlib.Path(exists=False, file_okay=True), help="CSV database")
 @click.option("--tagfile", metavar='<tag file>', type=click_pathlib.Path(exists=False, file_okay=True), default=None,
               help="Export all tags in text file")
+@click.option("--tag", "-t", multiple=True, help="Add extra tag")
 @click.option("-f", '--from-files', is_flag=True, default=False, help="Use only tags from files")
 @click.option("-fdb", '--from-db', is_flag=True, default=False, help="Use only tags from csv file")
 @click.option("--dry", default=False, is_flag=True, help="Dry run")
@@ -359,6 +414,7 @@ def main(  # pylint: disable=C0103
         input_files: Sequence[Sequence[Path]],
         db: Optional[Path] = None,
         tagfile: Optional[Path] = None,
+        tag: Optional[Sequence[str]] = None,
         from_files: bool = False,
         from_db: bool = False,
         dry: bool = False,
@@ -399,6 +455,7 @@ def main(  # pylint: disable=C0103
             database=db,
             from_files=from_files,
             from_db=from_db,
+            extra_tags=set(tag if tag else []),
             tag_file=tagfile,
             dry=dry,
             verbose=verbose)
