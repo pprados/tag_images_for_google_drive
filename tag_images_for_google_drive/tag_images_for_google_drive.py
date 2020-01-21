@@ -137,6 +137,7 @@ def tag_images_for_google_drive(
         tag_file: Optional[Path] = None,
         from_files: bool = False,
         from_db: bool = False,
+        force: bool = False,
         dry: bool = False,
         verbose: int = 0) -> Tuple[Mapping[Path, Tuple[str, Sequence[str]]], Mapping[Path, Tuple[str, Sequence[str]]]]:
     """
@@ -180,6 +181,7 @@ def tag_images_for_google_drive(
                                             extra_tags,
                                             update_descriptions,
                                             updated_files,
+                                            force,
                                             verbose)
 
         # 2. Apply the descriptions file
@@ -192,6 +194,7 @@ def tag_images_for_google_drive(
                                          extra_tags,
                                          update_descriptions,
                                          updated_files,
+                                         force,
                                          verbose)
 
         # 3. Apply update files
@@ -204,7 +207,7 @@ def tag_images_for_google_drive(
     all_tags: AbstractSet[str] = set()
     nb_files = len(ref_descriptions)
     nb_total_tags = 0
-    for _, (_, keywords) in ref_descriptions.items():
+    for path, (_, keywords) in ref_descriptions.items():
         nb_total_tags += len(keywords)
         all_tags = set(all_tags).union(keywords)
     LOGGER.info(f"Use {nb_total_tags} tags in {nb_files} files, with a dictionary of {len(all_tags)} "
@@ -225,6 +228,7 @@ def _manage_files(exif_tool: ExifTool,
                   extratags: Set[str],
                   update_descriptions: bool,
                   updated_files: Dict[Path, Tuple[str, List[str]]],
+                  force: bool,
                   verbose: int = 0):
     LOGGER.debug("Update images...")
     for file in input_files:
@@ -233,6 +237,8 @@ def _manage_files(exif_tool: ExifTool,
         if verbose >= 3:
             LOGGER.debug(f"Inspect {rel_file}...")
         must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
+        if force:
+            must_update = True
         if not set(extratags).issubset(keywords):
             must_update = True
             keywords.extend(extratags)
@@ -256,6 +262,7 @@ def _manage_db(exif_tool: ExifTool,
                extratags: Set[str],
                update_descriptions: bool,
                updated_files: Dict[Path, Tuple[str, List[str]]],
+               force: bool,
                verbose: int = 0):
     if not from_files:
         LOGGER.debug(f"Apply csv file...")
@@ -267,6 +274,8 @@ def _manage_db(exif_tool: ExifTool,
             if file.is_file():
                 file_date = file.stat().st_mtime
                 must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
+                if force:
+                    must_update = True
                 if not keywords:
                     LOGGER.warning(f"{file.relative_to(Path.cwd())} has not tags")
                 if not set(extratags).issubset(keywords):
@@ -334,13 +343,13 @@ def _manage_updated_db(database: Optional[Path],
                     str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
                     description = description.strip()
                     description_and_tags = f"{description} {str_tags}" if len(description) > 0 else str_tags
-                    if not str(path):
+                    if str(path):
                         writer.writerow([str(path), description_and_tags])
-                    f.flush()
-                    # Commit change
-                    if database.is_file():
-                        database.unlink()
-                    new_csv_file.rename(database)
+                # Commit change
+                f.close()
+                if database.is_file():
+                    database.unlink()
+                new_csv_file.rename(database)
         finally:
             if new_csv_file.is_file():
                 new_csv_file.unlink()
@@ -410,6 +419,7 @@ def _manage_file_and_db(desc: str,  # pylint: disable=R0913
 @click.option("-fdb", '--from-db', is_flag=True, default=False, help="Use only tags from csv file")
 @click.option("--dry", default=False, is_flag=True, help="Dry run")
 @click.option("-v", '--verbose', count=True, help="Verbosity")
+@click.option("--force", is_flag=True, help="Force to update all images files")
 def main(  # pylint: disable=C0103
         input_files: Sequence[Sequence[Path]],
         db: Optional[Path] = None,
@@ -418,6 +428,7 @@ def main(  # pylint: disable=C0103
         from_files: bool = False,
         from_db: bool = False,
         dry: bool = False,
+        force: bool = False,
         verbose: int = 0):
     """Synchronize CSV database and PNG/JPEG files to add #hashtag in image description.
        Then, you can synchronize all files with Google drive.
@@ -457,6 +468,7 @@ def main(  # pylint: disable=C0103
             from_db=from_db,
             extra_tags=set(tag if tag else []),
             tag_file=tagfile,
+            force=force,
             dry=dry,
             verbose=verbose)
         if verbose >= 3:
