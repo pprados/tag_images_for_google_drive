@@ -196,7 +196,7 @@ class TestTagImages(unittest.TestCase):
 
         # Then file was added in ref_description and file was updated
         self.assertEqual({pngfile: ("Description", ["tag1", "tag2"])}, ref_descriptions)
-        self.assertEqual({pngfile.absolute(): ("Description", ["tag1", "tag2"])}, updated_files)
+        self.assertEqual({}, updated_files)
 
     def test_empty_csv_with_file_not_to_update(self):
         # Given
@@ -246,7 +246,6 @@ class TestTagImages(unittest.TestCase):
             pngfile: ("Description", ["tag1", "tag2"]),
         }, ref_descriptions)
         self.assertEqual({
-            pngfile.absolute(): ("Description", ["tag1", "tag2"]),
             Path("tests/image_with_tags2.png").absolute(): ("Description", ["csv", "tag1", "tag2"]),
             Path("tests/image_without_tags.png").absolute(): ("Description", ["csv", "tag1", "tag2"]),
         }, updated_files)
@@ -275,9 +274,7 @@ class TestTagImages(unittest.TestCase):
             Path("tests/not_a_file.png"): ("Description", ["tag1", "tag2"]),
             pngfile: ("Description", ["tag1", "tag2"])
         }, ref_descriptions)
-        self.assertEqual({
-            pngfile.absolute(): ("Description", ["tag1", "tag2"]),
-        }, updated_files)
+        self.assertEqual({ }, updated_files)
 
     def test_merge(self):
         # Given

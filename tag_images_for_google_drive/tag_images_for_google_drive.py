@@ -72,6 +72,7 @@ def _extract_description(metadata: Mapping[str, str]) -> str:
     description = metadata.get("XMP:Description", description)
     description = metadata.get("PNG:Comment", description)
     description = metadata.get("File:Comment", description)
+    description = metadata.get("Description", description)
     return description
 
 
@@ -98,36 +99,40 @@ def _extract_description_and_tags(exif_tool: ExifTool, file: Path) -> Tuple[bool
     return must_update, description.strip(), keywords
 
 
-def _extract_keywords(description, metadata):
+def _extract_keywords(description, metadata) -> Tuple[Sequence[str], Sequence[str]]:
     keywords: List[str] = []
     # Limit to 64 chars
     keywords = metadata.get("XMP:Subject")
     if not keywords:
-        keywords = metadata.get("IPTC:Keywords", keywords)
-        if isinstance(keywords, str):
-            if len(keywords) < 63:  # I can trust the keywords tag
-                _, keywords = _extract_tags("," + keywords, ",")
+        keys = ["IPTC:Keywords", "Keywords"]
+        all_keywords: List[str] = []
+        for key in keys:
+            keywords = metadata.get(key, keywords)
+            if isinstance(keywords, str):
+                if len(keywords) < 63:  # I can trust the keywords tag
+                    _, keywords = _extract_tags("," + keywords, ",")
+                    keywords = keywords + _extract_tags(description, "#")[1]
+                    old_keywords = keywords
+                else:
+                    keywords = _extract_tags(description, "#")[1]
+                    keywords = [str(i) for i in keywords if i]  # Remove empty tags
+                    old_keywords = keywords
+            elif keywords:
+                keywords = [str(key) for key in keywords]
+                old_keywords = keywords
                 keywords = keywords + _extract_tags(description, "#")[1]
-                old_keywords = keywords
             else:
+                old_keywords = []
                 keywords = _extract_tags(description, "#")[1]
-                keywords = [str(i) for i in keywords if i]  # Remove empty tags
-                old_keywords = keywords
-        elif keywords:
-            keywords = [str(key) for key in keywords]
-            old_keywords = keywords
-            keywords = keywords + _extract_tags(description, "#")[1]
-        else:
-            old_keywords = []
-            keywords = _extract_tags(description, "#")[1]
+            all_keywords += keywords
     else:
         if isinstance(keywords, str):
             _, keywords = _extract_tags("," + keywords, ",")
-        keywords = [str(key) for key in keywords]
-        old_keywords = keywords
-        keywords = sorted(set(keywords + _extract_tags(description, "#")[1]))
+        all_keywords = [str(key) for key in keywords]
+        old_keywords = all_keywords
+        all_keywords = sorted(set(all_keywords + _extract_tags(description, "#")[1]))
     # Force use str
-    return keywords, old_keywords
+    return all_keywords, old_keywords
 
 
 def tag_images_for_google_drive(
@@ -207,7 +212,7 @@ def tag_images_for_google_drive(
     all_tags: AbstractSet[str] = set()
     nb_files = len(ref_descriptions)
     nb_total_tags = 0
-    for path, (_, keywords) in ref_descriptions.items():
+    for _, (_, keywords) in ref_descriptions.items():
         nb_total_tags += len(keywords)
         all_tags = set(all_tags).union(keywords)
     LOGGER.info(f"Use {nb_total_tags} tags in {nb_files} files, with a dictionary of {len(all_tags)} "
@@ -229,7 +234,7 @@ def _manage_files(exif_tool: ExifTool,
                   update_descriptions: bool,
                   updated_files: Dict[Path, Tuple[str, List[str]]],
                   force: bool,
-                  verbose: int = 0):
+                  verbose: int = 0) -> bool:
     LOGGER.debug("Update images...")
     for file in input_files:
         file = file.absolute()
@@ -253,7 +258,7 @@ def _manage_files(exif_tool: ExifTool,
     return update_descriptions
 
 
-def _manage_db(exif_tool: ExifTool,
+def _manage_db(exif_tool: ExifTool,  # pylint: disable=too-many-arguments
                description_date: float,
                from_db: bool,
                from_files: bool,
@@ -263,7 +268,7 @@ def _manage_db(exif_tool: ExifTool,
                update_descriptions: bool,
                updated_files: Dict[Path, Tuple[str, List[str]]],
                force: bool,
-               verbose: int = 0):
+               verbose: int = 0) -> bool:
     if not from_files:
         LOGGER.debug(f"Apply csv file...")
         remove_files = []
@@ -367,7 +372,7 @@ def _manage_file_and_db(desc: str,  # pylint: disable=R0913
                         rel_file: Path,
                         tags: List[str],
                         update_descriptions: bool,
-                        updated_files: Dict[Path, Tuple[str, List[str]]]):
+                        updated_files: Dict[Path, Tuple[str, List[str]]]) -> bool:
     if from_db:
         updated_files[file] = (desc, tags)
     else:
@@ -429,7 +434,7 @@ def main(  # pylint: disable=C0103
         from_db: bool = False,
         dry: bool = False,
         force: bool = False,
-        verbose: int = 0):
+        verbose: int = 0) -> int:
     """Synchronize CSV database and PNG/JPEG files to add #hashtag in image description.
        Then, you can synchronize all files with Google drive.
 
