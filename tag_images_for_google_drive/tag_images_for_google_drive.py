@@ -19,6 +19,8 @@ from tag_images_for_google_drive.tools import Glob, init_logger
 
 LOGGER = logging.getLogger(__name__)
 
+SEP = ","
+
 
 def _set_tags(exif_tool: ExifTool, meta_info: Mapping[str, str], file: Path) -> None:
     """
@@ -30,6 +32,8 @@ def _set_tags(exif_tool: ExifTool, meta_info: Mapping[str, str], file: Path) -> 
     """
     params = ["-" + key + "=" + val for key, val in meta_info.items()]
     params.append("-overwrite_original")
+    params.append("-sep")
+    params.append(SEP)
     params.append("-photoshop:all=")
     params.append(str(file))
     exif_tool.execute(*params)
@@ -319,7 +323,7 @@ def _manage_updated_files(exif_tools: ExifTool,
         if description_and_tags != "":
             LOGGER.info(f"Update '{file.relative_to(Path.cwd())}' with '{description_and_tags}'")
             if not dry:
-                subject = ",".join(keywords)
+                subject = SEP.join(keywords)
                 iptc_keywords = subject
                 while len(iptc_keywords) >= 63:
                     iptc_keywords = iptc_keywords[:iptc_keywords.rfind(',')]
