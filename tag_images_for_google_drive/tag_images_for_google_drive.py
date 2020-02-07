@@ -30,6 +30,7 @@ def _set_tags(exif_tool: ExifTool, meta_info: Mapping[str, str], file: Path) -> 
     """
     params = ["-" + key + "=" + val for key, val in meta_info.items()]
     params.append("-overwrite_original")
+    params.append("-photoshop:all=")
     params.append(str(file))
     exif_tool.execute(*params)
 
@@ -182,6 +183,7 @@ def tag_images_for_google_drive(
         # 1. Update images files
         update_descriptions = _manage_files(exif_tool,
                                             input_files,
+                                            from_db,
                                             ref_descriptions,
                                             extra_tags,
                                             update_descriptions,
@@ -229,6 +231,7 @@ def tag_images_for_google_drive(
 
 def _manage_files(exif_tool: ExifTool,
                   input_files: AbstractSet[Path],
+                  from_db: bool,
                   ref_descriptions: Dict[Path, Tuple[str, List[str]]],
                   extratags: Set[str],
                   update_descriptions: bool,
@@ -242,7 +245,7 @@ def _manage_files(exif_tool: ExifTool,
         if verbose >= 3:
             LOGGER.debug(f"Inspect {rel_file}...")
         must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
-        if force:
+        if not from_db and force:
             must_update = True
         if not set(extratags).issubset(keywords):
             must_update = True
@@ -258,7 +261,7 @@ def _manage_files(exif_tool: ExifTool,
     return update_descriptions
 
 
-def _manage_db(exif_tool: ExifTool,  # pylint: disable=too-many-arguments
+def _manage_db(exif_tool: ExifTool,  # pylint: disable=too-many-arguments,too-many-branches
                description_date: float,
                from_db: bool,
                from_files: bool,
@@ -279,11 +282,11 @@ def _manage_db(exif_tool: ExifTool,  # pylint: disable=too-many-arguments
             if file.is_file():
                 file_date = file.stat().st_mtime
                 must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
-                if force:
-                    must_update = True
                 if not keywords:
                     LOGGER.warning(f"{file.relative_to(Path.cwd())} has not tags")
-                if not set(extratags).issubset(keywords):
+                if not from_files and force:
+                    must_update = True
+                if not from_files and not set(extratags).issubset(keywords):
                     tags.extend(extratags)
                     tags = sorted(tags)
                 if must_update:
@@ -328,6 +331,7 @@ def _manage_updated_files(exif_tools: ExifTool,
                            "Headline": description,
                            "KeyWords": iptc_keywords,
                            "Subject": subject,
+                           "HierarchicalSubject": subject,
                            },
                           file)
 
@@ -453,7 +457,7 @@ def main(  # pylint: disable=C0103
             from_files = True
 
         if bool(from_files) + bool(from_db) > 1:
-            LOGGER.error("--from_files and --from_db are mutually incompatible")
+            LOGGER.error("--from_files/-f and --from_db/-fdb are mutually incompatible")
             return -1
         if (from_db or not from_files) and not db:
             LOGGER.error("Set --db <file> with --from_files or --merge")
