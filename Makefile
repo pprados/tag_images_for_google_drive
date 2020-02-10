@@ -365,7 +365,8 @@ ifeq ($(OFFLINE),True)
 	@echo -e "$(red)Can not check-twine in offline mode$(normal)"
 else
 	$(VALIDATE_VENV)
-	twine check dist/*
+	twine check \
+		$(shell find dist -type f \( -name "*.whl" -or -name '*.gz' \) -and ! -iname "*dev*" )
 endif
 
 .PHONY: test-twine
@@ -375,19 +376,25 @@ ifeq ($(OFFLINE),True)
 	@echo -e "$(red)Can not test-twine in offline mode$(normal)"
 else
 	$(VALIDATE_VENV)
-	twine upload --sign --repository-url https://test.pypi.org/legacy/ dist/*
+	rm -f dist/*.asc
+	twine upload --sign --repository-url https://test.pypi.org/legacy/ \
+		$(shell find dist -type f \( -name "*.whl" -or -name '*.gz' \) -and ! -iname "*dev*" )
 endif
 
 .PHONY: release
 ## Publish distribution on pypi.org
-release: dist
+release: clean dist
 ifeq ($(OFFLINE),True)
 	@echo -e "$(red)Can not release in offline mode$(normal)"
 else
 	@$(VALIDATE_VENV)
-	[[ $$(ls -1 dist --hide "*.dev*" | wc -l) -ne 0 ]] || echo -e "$(red)Add a tag version in GIT to release$(normal)"
+	[[ $$( find dist -name "*.dev*" | wc -l ) == 0 ]] || \
+		( echo -e "$(red)Add a tag version in GIT before release$(normal)" \
+		; exit 1 )
+	rm -f dist/*.asc
 	echo "Enter Pypi password"
-	ls $(PWD)/dist/* --hide "*.dev*" | xargs twine upload
+	twine upload --sign \
+		$(shell find dist -type f \( -name "*.whl" -or -name '*.gz' \) -and ! -iname "*dev*" )
 endif
 
 .PHONY: clean-pyc
@@ -481,7 +488,7 @@ develop: $(REQUIREMENTS)
 
 ## Install the tools in conda env
 uninstall: $(CONDA_PREFIX)/bin/$(PRJ)
-	rm $(CONDA_PREFIX)/bin/$(PRJ)
+	pip uninstall $(PRJ)
 
 
 ifeq ($(OS),Darwin)

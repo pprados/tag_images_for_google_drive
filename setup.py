@@ -91,9 +91,9 @@ setup(
     license='Apache License',
     keywords="image index google drive",
     classifiers=[  # See https://pypi.org/classifiers/
-        'Development Status :: 2 - PRE-ALPHA',
+        # 'Development Status :: 2 - PRE-ALPHA',
         # Before release
-        # 'Development Status :: 5 - Production/Stable',
+        'Development Status :: 5 - Production/Stable',
         'Environment :: Console',
         'Intended Audience :: End Users/Desktop',
         'License :: OSI Approved',
