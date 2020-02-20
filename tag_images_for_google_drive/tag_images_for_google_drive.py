@@ -107,7 +107,7 @@ def _extract_description_and_tags(exif_tool: ExifTool, file: Path) -> Tuple[bool
 def _extract_keywords(description, metadata) -> Tuple[Sequence[str], Sequence[str]]:
     keywords: List[str] = []
     # Limit to 64 chars
-    keywords = metadata.get("XMP:Subject")
+    keywords = str(metadata.get("XMP:Subject"))
     if not keywords:
         keys = ["IPTC:Keywords", "Keywords"]
         all_keywords: List[str] = []
