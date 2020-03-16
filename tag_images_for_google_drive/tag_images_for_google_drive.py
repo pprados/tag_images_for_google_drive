@@ -99,8 +99,10 @@ def _extract_description_and_tags(exif_tool: ExifTool, file: Path) -> Tuple[bool
 
     old_keywords = _purge_tags(old_keywords)
     keywords = _purge_tags(keywords)
-    description = description.split('#')[0]
-    must_update = old_keywords != keywords
+    split = description.split('#')
+    description = split[0]
+    in_description = _purge_tags(split[1:])
+    must_update = old_keywords != keywords or in_description != keywords
     return must_update, description.strip(), keywords
 
 
@@ -136,6 +138,7 @@ def _extract_keywords(description, metadata) -> Tuple[Sequence[str], Sequence[st
         elif isinstance(keywords, int):
             keywords = [str(keywords)]
         all_keywords = [str(key) for key in keywords]
+        all_keywords = all_keywords + _extract_tags(description, "#")[1]
         old_keywords = all_keywords
         all_keywords = sorted(set(all_keywords + _extract_tags(description, "#")[1]))
     # Force use str
