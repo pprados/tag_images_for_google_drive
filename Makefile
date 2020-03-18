@@ -499,7 +499,7 @@ dist/$(PRJ): .make-validate
 	touch dist/$(PRJ)
 ifeq ($(BACKOS),Windows)
 # Must have conda installed on windows with tag_images_for_google_drive env
-	/mnt/c/WINDOWS/system32/cmd.exe /C 'conda activate $(PRJ) && python setup.py develop && pyinstaller --onefile tag_images_for_google_drive/tag_images_for_google_drive.py'
+	/mnt/c/WINDOWS/system32/cmd.exe /C 'conda activate $(PRJ) && python setup.py develop && pyinstaller --hidden-import='pkg_resources.py2_warn' --onefile tag_images_for_google_drive/tag_images_for_google_drive.py'
 	touch dist/$(PRJ).exe
 	echo -e "$(cyan)Executable is here 'dist/$(PRJ).exe'$(normal)"
 endif

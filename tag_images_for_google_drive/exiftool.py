@@ -169,11 +169,16 @@ class ExifTool:
             return
         with open(os.devnull, "w") as devnull:
             self._process = subprocess.Popen(
-                [self.executable, "-stay_open", "True", "-@", "-",
-                 "-common_args", "-G", "-n"],
-                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                [self.executable,
+                 "-stay_open", "True",
+                 "-@", "-",
+                 "-common_args", "-G", "-n",
+                 "-charset", "UTF-8"
+                 ],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
                 stderr=devnull,
-                # encoding="utf-8",
+                encoding="utf-8",
                 text=True
             )
         self.running = True
@@ -186,8 +191,9 @@ class ExifTool:
         if not self.running:
             return
         if self._process:
-            self._process.stdin.write("-stay_open\nFalse\n")
-            self._process.stdin.flush()
+            if not self._process.stdin.closed:
+                self._process.stdin.write("-stay_open\nFalse\n")
+                self._process.stdin.flush()
             self._process.communicate()
             self._process = None
         self.running = False
@@ -227,9 +233,8 @@ class ExifTool:
         self._process.stdin.write("\n".join(params + ("-execute\n",)))
         self._process.stdin.flush()
         output = ""
-        fd = self._process.stdout.fileno()
         while not output[-32:].strip().endswith(SENTINEL):
-            output += str(os.read(fd, BLOCK_SIZE), "UTF-8")
+            output += self._process.stdout.readline()
         return output.strip()[:-len(SENTINEL)]
 
     def execute_json(self, *params: str) -> List[Dict[str, Any]]:
