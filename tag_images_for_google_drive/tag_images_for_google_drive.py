@@ -228,6 +228,13 @@ def tag_images_for_google_drive(
         all_tags = set(all_tags).union(keywords)
     LOGGER.info(f"Use {nb_total_tags} tags in {nb_files} files, with a dictionary of {len(all_tags)} "
                 f"({int(nb_files / nb_total_tags * 100) if nb_total_tags else 0} t/f).")
+    _manage_tags_file(all_tags, dry, tag_file)
+
+    LOGGER.debug(f"Done")
+    return ref_descriptions, updated_files
+
+
+def _manage_tags_file(all_tags, dry, tag_file):
     if not dry and tag_file:
         all_tags = set(sorted(set(all_tags)))
         old_version = tag_file.with_suffix(".txt.old")
@@ -247,9 +254,6 @@ def tag_images_for_google_drive(
                 if old_version.exists():
                     shutil.copy(old_version, tag_file)
                     old_version.unlink()
-
-    LOGGER.debug(f"Done")
-    return ref_descriptions, updated_files
 
 
 def _manage_files(exif_tool: ExifTool,
