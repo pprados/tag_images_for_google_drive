@@ -493,6 +493,8 @@ uninstall: $(CONDA_PREFIX)/bin/$(PRJ)
 
 ifeq ($(OS),Darwin)
 PYINSTALLER_OPT=--hiddenimport _sysconfigdata_m_darwin_darwin --hidden-import=pkg_resources.py2_warn
+else
+PYINSTALLER_OPT=--hidden-import=pkg_resources.py2_warn
 endif
 dist/$(PRJ): .make-validate
 	@PYTHONOPTIMIZE=2 && pyinstaller $(PYINSTALLER_OPT) --onefile $(PRJ)/$(PRJ).py
