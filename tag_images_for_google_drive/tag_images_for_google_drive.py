@@ -232,7 +232,8 @@ def tag_images_for_google_drive(
         all_tags = set(sorted(set(all_tags)))
         old_version = tag_file.with_suffix(".txt.old")
         try:
-            shutil.copy(tag_file, old_version)
+            if tag_file.exists():
+                shutil.copy(tag_file, old_version)
             with open(str(tag_file), 'w') as f:
                 f.seek(0)
                 f.truncate()
@@ -241,9 +242,10 @@ def tag_images_for_google_drive(
             old_version.unlink()
         finally:
             if old_version.is_file():
-                tag_file.unlink()
-                shutil.copy(old_version, tag_file)
-                if old_version.is_file():
+                if tag_file.exists():
+                    tag_file.unlink()
+                if old_version.exists():
+                    shutil.copy(old_version, tag_file)
                     old_version.unlink()
 
     LOGGER.debug(f"Done")
@@ -366,7 +368,8 @@ def _manage_updated_db(database: Optional[Path],
             LOGGER.debug(f"Update csv file...")
             # Update "in place"
             old_version = database.with_suffix(".csv.old")
-            shutil.copy(database, old_version)
+            if database.exists():
+                shutil.copy(database, old_version)
             with open(str(database), 'wt', encoding='utf-8', newline='\n') as f:
                 f.seek(0)
                 f.truncate()
@@ -384,9 +387,11 @@ def _manage_updated_db(database: Optional[Path],
                     old_version.unlink()
         finally:
             if old_version.is_file():
-                database.unlink()
-                shutil.copy(old_version, database)
-                old_version.unlink()
+                if old_version.exists():
+                    if database.exists():
+                        database.unlink()
+                    shutil.copy(old_version, database)
+                    old_version.unlink()
 
 
 def _manage_file_and_db(desc: str,  # pylint: disable=R0913
