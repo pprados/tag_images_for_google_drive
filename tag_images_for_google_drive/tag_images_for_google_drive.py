@@ -230,9 +230,19 @@ def tag_images_for_google_drive(
                 f"({int(nb_files / nb_total_tags * 100) if nb_total_tags else 0} t/f).")
     if not dry and tag_file:
         all_tags = set(sorted(set(all_tags)))
-        with open(str(tag_file), 'w') as f:
-            for tag in all_tags:
-                f.write(tag + os.linesep)
+        old_name = tag_file.with_suffix(".txt.old")
+        try:
+            shutil.copy(tag_file, old_name)
+            with open(str(tag_file), 'w') as f:
+                f.seek(0)
+                f.truncate()
+                for tag in all_tags:
+                    f.write(tag + os.linesep)
+        finally:
+            if old_name.is_file():
+                tag_file.unlink()
+                shutil.copy(old_name, tag_file)
+                old_name.unlink()
 
     LOGGER.debug(f"Done")
     return ref_descriptions, updated_files
@@ -352,9 +362,12 @@ def _manage_updated_db(database: Optional[Path],
     if database and not dry and update_descriptions:
         try:
             LOGGER.debug(f"Update csv file...")
-            new_csv_file = database.with_suffix(".csv.tmp")
-            with open(str(new_csv_file), 'wt', encoding='utf-8', newline='\n') as f:
-
+            # Update "in place"
+            old_version = database.with_suffix(".csv.old")
+            shutil.copy(database, old_version)
+            with open(str(database), 'wt', encoding='utf-8', newline='\n') as f:
+                f.seek(0)
+                f.truncate()
                 writer = csv.writer(f)
                 ref_descriptions = {key: ref_descriptions[key] for key in sorted(ref_descriptions.keys())}
                 for path, (description, keywords) in ref_descriptions.items():
@@ -365,12 +378,13 @@ def _manage_updated_db(database: Optional[Path],
                         writer.writerow([str(path), description_and_tags])
                 # Commit change
                 f.close()
-                if database.is_file():
-                    database.unlink()
-                new_csv_file.rename(database)
+                if old_version.is_file():
+                    old_version.unlink()
         finally:
-            if new_csv_file.is_file():
-                new_csv_file.unlink()
+            if old_version.is_file():
+                database.unlink()
+                shutil.copy(old_version, database)
+                old_version.unlink()
 
 
 def _manage_file_and_db(desc: str,  # pylint: disable=R0913
@@ -428,7 +442,8 @@ def _manage_file_and_db(desc: str,  # pylint: disable=R0913
 
 
 @click.command(short_help="Synchronize and update csv and files hash-tags")
-@click.argument("input_files", metavar='<selected files>', type=Glob(default_suffix="**/*.jpg"), nargs=-1)
+@click.argument("input_files", metavar='<selected files>', type=Glob(default_suffix="**/*.jpg", recursive=True),
+                nargs=-1)
 @click.option("--db", metavar='<csv file>', type=click_pathlib.Path(exists=False, file_okay=True), help="CSV database")
 @click.option("--tagfile", metavar='<tag file>', type=click_pathlib.Path(exists=False, file_okay=True), default=None,
               help="Export all tags in text file")
