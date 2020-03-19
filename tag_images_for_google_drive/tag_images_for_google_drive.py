@@ -230,19 +230,21 @@ def tag_images_for_google_drive(
                 f"({int(nb_files / nb_total_tags * 100) if nb_total_tags else 0} t/f).")
     if not dry and tag_file:
         all_tags = set(sorted(set(all_tags)))
-        old_name = tag_file.with_suffix(".txt.old")
+        old_version = tag_file.with_suffix(".txt.old")
         try:
-            shutil.copy(tag_file, old_name)
+            shutil.copy(tag_file, old_version)
             with open(str(tag_file), 'w') as f:
                 f.seek(0)
                 f.truncate()
                 for tag in all_tags:
                     f.write(tag + os.linesep)
+            old_version.unlink()
         finally:
-            if old_name.is_file():
+            if old_version.is_file():
                 tag_file.unlink()
-                shutil.copy(old_name, tag_file)
-                old_name.unlink()
+                shutil.copy(old_version, tag_file)
+                if old_version.is_file():
+                    old_version.unlink()
 
     LOGGER.debug(f"Done")
     return ref_descriptions, updated_files
@@ -375,7 +377,7 @@ def _manage_updated_db(database: Optional[Path],
                     description = description.strip()
                     description_and_tags = f"{description} {str_tags}" if len(description) > 0 else str_tags
                     if str(path):
-                        writer.writerow([str(path), description_and_tags])
+                        writer.writerow([path.as_posix(), description_and_tags])
                 # Commit change
                 f.close()
                 if old_version.is_file():
