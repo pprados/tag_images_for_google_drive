@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 import sys
+from json import JSONDecodeError
 from pathlib import Path
 from typing import Dict, Tuple, Sequence, Optional, Mapping, AbstractSet, List, Set
 
@@ -36,7 +37,10 @@ def _set_tags(exif_tool: ExifTool, meta_info: Mapping[str, str], file: Path) -> 
     params.append(SEP)
     params.append("-photoshop:all=")
     params.append(str(file))
-    exif_tool.execute(*params)
+    try:
+        exif_tool.execute(*params)
+    except (UnicodeEncodeError, JSONDecodeError) as e:
+        LOGGER.error(e)
 
 
 def _purge_tags(tags: Sequence[str]) -> List[str]:
@@ -46,7 +50,7 @@ def _purge_tags(tags: Sequence[str]) -> List[str]:
        :param tags: A sequence of tags
        :return: purged tags
     """
-    return sorted({key.strip().lower() for key in tags if key})
+    return sorted(set({key.strip().lower() for key in tags if key}))
 
 
 def _extract_tags(description: str, separator: str) -> Tuple[str, List[str]]:
@@ -272,7 +276,7 @@ def _manage_files(exif_tool: ExifTool,
         if verbose >= 3:
             LOGGER.debug(f"Inspect {rel_file}...")
         must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
-        if not from_db and force:
+        if from_db and force:
             must_update = True
         if not set(extratags).issubset(keywords):
             must_update = True

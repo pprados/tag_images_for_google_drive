@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 # PyExifTool <http://github.com/smarnach/pyexiftool>
 # Copyright 2012 Sven Marnach
+# Copyright 2020 Philippe Prados
 
-# This file is part of PyExifTool.
+# This file is derived from the work of Sven Marnach
 #
 # PyExifTool is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,7 +14,6 @@
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 #
-# See COPYING.GPL or COPYING.BSD for more details.
 
 """
 PyExifTool is a Python library to communicate with an instance of Phil
@@ -32,40 +32,22 @@ The source code can be checked out from the github repository with
 
 ::
 
-    git clone git://github.com/smarnach/pyexiftool.git
-
-Alternatively, you can download a tarball_.  There haven't been any
-releases yet.
-
-.. _tarball:  https://codeload.github.com/smarnach/pyexiftool/legacy.tar.gz/master
-
 PyExifTool is licenced under GNU GPL version 3 or later.
-
-Example usage::
-
-    import exiftool
-
-    files = ["a.jpg", "b.png", "c.tif"]
-    with exiftool.ExifTool() as et:
-        metadata = et.get_metadata_batch(files)
-    for d in metadata:
-        print("{:20.20} {:20.20}".format(d["SourceFile"],
-                                         d["EXIF:DateTimeOriginal"]))
 """
-import logging
-import subprocess
-import os
 import json
+import logging
+import os
+import subprocess
 import warnings
-from json import JSONDecodeError
 from typing import Optional, Tuple, Type, Dict, Any, List
 
 LOGGER = logging.getLogger(__name__)
 
-# try:  # Py3k compatibility
-#    BASESTRING=(bytes, str)
-# except NameError:
-#    BASESTRING = (bytes, str)
+_CHARSET = "UTF-8"
+_CHARSET_FILENAME = "UTF-8"
+_CHARSET_ENCODING = "UTF-8"
+_USE_SHELL = False
+# _CHARSET_ENCODING = None
 
 BASESTRING = (bytes, str)
 
@@ -84,35 +66,6 @@ SENTINEL = "{ready}"
 # should be fine, though other values might give better performance in
 # some cases.
 BLOCK_SIZE = 4096
-
-
-# This code has been adapted from Lib/os.py in the Python source tree
-# (sha1 265e36e277f3)
-def _fscodec():
-    # encoding = sys.getfilesystemencoding()
-    # errors = "strict"
-    # if encoding != "mbcs":
-    #     try:
-    #         codecs.lookup_error("surrogateescape")
-    #     except LookupError:
-    #         pass
-    #     else:
-    #         errors = "surrogateescape"
-
-    def fs_encode(filename):
-        """
-        Encode filename to the filesystem encoding with 'surrogateescape' error
-        handler, return bytes unchanged. On Windows, use 'strict' error handler if
-        the file system encoding is 'mbcs' (which is the default encoding).
-        """
-        # return filename if isinstance(filename, bytes) else filename.encode(encoding, errors)
-        return filename
-
-    return fs_encode
-
-
-FS_ENCODE = _fscodec()
-del _fscodec
 
 
 class ExifTool:
@@ -168,18 +121,21 @@ class ExifTool:
             warnings.warn("ExifTool already running; doing nothing.")
             return
         with open(os.devnull, "w") as devnull:
+            cmd = [self.executable,
+                   "-stay_open", "True",
+                   "-charset", _CHARSET,
+                   "-charset", "filename=" + _CHARSET_FILENAME,
+                   "-@", "-",
+                   "-common_args", "-G", "-n",
+                   ]
             self._process = subprocess.Popen(
-                [self.executable,
-                 "-stay_open", "True",
-                 "-@", "-",
-                 "-common_args", "-G", "-n",
-                 "-charset", "UTF-8"
-                 ],
+                cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=devnull,
-                encoding="utf-8",
-                text=True
+                encoding=_CHARSET_ENCODING,
+                text=True,
+                shell=_USE_SHELL,
             )
         self.running = True
 
@@ -230,12 +186,14 @@ class ExifTool:
         """
         if not self.running or not self._process:
             raise ValueError("ExifTool instance not running.")
-        self._process.stdin.write("\n".join(params + ("-execute\n",)))
+        input_cmd = "\n".join(params + ("-execute\n",))
+        self._process.stdin.write(input_cmd)
         self._process.stdin.flush()
         output = ""
         while not output[-32:].strip().endswith(SENTINEL):
             output += self._process.stdout.readline()
-        return output.strip()[:-len(SENTINEL)]
+        output = output.strip()[:-len(SENTINEL)]
+        return output
 
     def execute_json(self, *params: str) -> List[Dict[str, Any]]:
         """Execute the given batch of parameters and parse the JSON output.
@@ -259,7 +217,7 @@ class ExifTool:
         respective Python version – as raw strings in Python 2.x and
         as Unicode strings in Python 3.x.
         """
-        return json.loads(self.execute("-j", *map(FS_ENCODE, params)))
+        return json.loads(self.execute("-j", *params))
 
     def get_metadata_batch(self, filenames: List[str]) -> List[Dict[str, Any]]:
         """Return all meta-data for the given files.
@@ -297,23 +255,8 @@ class ExifTool:
             raise TypeError("The argument 'filenames' must be "
                             "an iterable of strings")
         params = ["-" + t for t in tags]
-        try:
-            # Check if only ascii filename
-            filenames[0].encode("ascii")
-            params.extend(filenames)
-            try:
-                return self.execute_json(*params)
-            except JSONDecodeError:
-                LOGGER.warning(f"Can not manage filename {filenames} with unicode on Windows")
-                return [{}]
-        except UnicodeEncodeError:
-            # Work around **params
-            # p=subprocess.run(self.executable, *params, capture_output=True, encoding="UTF-8")
-            params.insert(0, filenames[0])
-            params.insert(0, "-json")
-            params.insert(0, self.executable)
-            p = subprocess.run(params, capture_output=True, encoding="UTF-8", check=True)
-            return json.loads(p.stdout)
+        params.append(filenames[0])
+        return self.execute_json(*params)
 
     def get_tags(self, tags, filename: str) -> Dict[str, Any]:
         """Return only specified tags for a single file.
