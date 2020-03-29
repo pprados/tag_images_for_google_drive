@@ -185,7 +185,9 @@ def tag_images_for_google_drive(
     if database and database.is_file():
         description_date = database.stat().st_mtime
         with open(str(database), 'rt', encoding='utf-8') as csv_file:
-            ref_descriptions = {Path(row[0]): _extract_tags(row[1], '#') for row in csv.reader(csv_file, delimiter=',')}
+            rows = csv.reader(csv_file, delimiter=',')
+
+            ref_descriptions = {Path(row[0]): _extract_tags(row[1], '#') for row in rows if len(row) == 2}
     else:
         update_descriptions = True
     if not shutil.which("exiftool"):
@@ -245,11 +247,11 @@ def _manage_tags_file(all_tags, dry, tag_file):
         try:
             if tag_file.exists():
                 shutil.copy(tag_file, old_version)
-            with open(str(tag_file), 'w') as f:
+            with open(str(tag_file), 'w', encoding="utf-8") as f:
                 f.seek(0)
                 f.truncate()
                 for tag in all_tags:
-                    f.write(tag + os.linesep)
+                    f.write(tag + "\n")
             old_version.unlink()
         finally:
             if old_version.is_file():
