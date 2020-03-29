@@ -186,7 +186,6 @@ def tag_images_for_google_drive(
         description_date = database.stat().st_mtime
         with open(str(database), 'rt', encoding='utf-8') as csv_file:
             rows = csv.reader(csv_file, delimiter=',')
-
             ref_descriptions = {Path(row[0]): _extract_tags(row[1], '#') for row in rows if len(row) == 2}
     else:
         update_descriptions = True
@@ -242,7 +241,7 @@ def tag_images_for_google_drive(
 
 def _manage_tags_file(all_tags, dry, tag_file):
     if not dry and tag_file:
-        all_tags = set(sorted(set(all_tags)))
+        all_tags = sorted(set(all_tags))
         old_version = tag_file.with_suffix(".txt.old")
         try:
             if tag_file.exists():
