@@ -507,7 +507,7 @@ ifeq ($(BACKOS),Windows)
 	echo -e "$(cyan)Executable is here 'dist/$(PRJ).exe'$(normal)"
 endif
 ifeq ($(OS),Darwin)
-	ln -f "dist/$(PRJ)" "dist/$(PRJ).macos"
+	ln -sf "dist/$(PRJ)" "dist/$(PRJ).macos"
 	echo -e "$(cyan)Executable is here 'dist/$(PRJ).macos'$(normal)"
 else
 	echo -e "$(cyan)Executable is here 'dist/$(PRJ)'$(normal)"
