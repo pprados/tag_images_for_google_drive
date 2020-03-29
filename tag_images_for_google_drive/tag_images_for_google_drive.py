@@ -5,7 +5,6 @@ Tools inject hashtag in file description and synchronize this tags in CSV file.
 import csv
 import itertools
 import logging
-import os
 import shutil
 import sys
 from json import JSONDecodeError
