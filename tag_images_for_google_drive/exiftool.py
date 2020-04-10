@@ -148,9 +148,9 @@ class ExifTool:
         if not self.running:
             return
         if self._process:
-            if not self._process.stdin.closed:
-                self._process.stdin.write("-stay_open\nFalse\n")
-                self._process.stdin.flush()
+            if not self._process.stdin.closed:  # type: ignore
+                self._process.stdin.write("-stay_open\nFalse\n")  # type: ignore
+                self._process.stdin.flush()  # type: ignore
             self._process.communicate()
             self._process = None
         self.running = False
@@ -188,11 +188,11 @@ class ExifTool:
         if not self.running or not self._process:
             raise ValueError("ExifTool instance not running.")
         input_cmd = "\n".join(params + ("-execute\n",))
-        self._process.stdin.write(input_cmd)
-        self._process.stdin.flush()
+        self._process.stdin.write(input_cmd)  # type: ignore
+        self._process.stdin.flush()  # type: ignore
         output = ""
         while not output[-32:].strip().endswith(SENTINEL):
-            output += self._process.stdout.readline()
+            output += self._process.stdout.readline()  # type: ignore
         output = output.strip()[:-len(SENTINEL)]
         return output
 

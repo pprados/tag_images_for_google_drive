@@ -287,7 +287,11 @@ def _manage_files(exif_tool: ExifTool,
             target_keywords = db_keywords
         if from_files:
             target_keywords = keywords
-        if from_db and force:
+        if from_files and rel_file in ref_descriptions and ref_descriptions[rel_file] != description:
+            LOGGER.debug(f"{'Update' if rel_file in ref_descriptions else 'Add'} in csv file '{rel_file}'")
+            update_descriptions = True
+            ref_descriptions[rel_file] = (description, keywords)
+        if force:
             must_update = True
         if not set(extratags).issubset(target_keywords):
             must_update = True
