@@ -272,9 +272,9 @@ class ExifTool:
                       "-charset", _CHARSET,
                       "-common_args", "-G", "-n",
                       "-json",
-                      filenames[0]
-                      ] + params
-            p = subprocess.run(params, shell=True, capture_output=True,
+                      ] + params + filenames
+
+            p = subprocess.run(params, shell=False, capture_output=True,
                                encoding=None,  # For windows :-(
                                check=True)
             return json.loads(p.stdout)
