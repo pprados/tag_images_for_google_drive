@@ -197,6 +197,7 @@ def tag_images_for_google_drive(
         update_descriptions = _manage_files(exif_tool,
                                             input_files,
                                             from_db,
+                                            from_files,
                                             ref_descriptions,
                                             extra_tags,
                                             update_descriptions,
@@ -263,6 +264,7 @@ def _manage_tags_file(all_tags, dry, tag_file):
 def _manage_files(exif_tool: ExifTool,
                   input_files: AbstractSet[Path],
                   from_db: bool,
+                  from_files: bool,
                   ref_descriptions: Dict[Path, Tuple[str, List[str]]],
                   extratags: Set[str],
                   update_descriptions: bool,
@@ -276,18 +278,27 @@ def _manage_files(exif_tool: ExifTool,
         if verbose >= 3:
             LOGGER.debug(f"Inspect {rel_file}...")
         must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
+        target_keywords = keywords
+        db_keywords: List[str] = []
+        if rel_file in ref_descriptions:
+            (_, db_keywords) = ref_descriptions[rel_file]
+            target_keywords += db_keywords
+        if from_db and rel_file in ref_descriptions:
+            target_keywords = db_keywords
+        if from_files:
+            target_keywords = keywords
         if from_db and force:
             must_update = True
-        if not set(extratags).issubset(keywords):
+        if not set(extratags).issubset(target_keywords):
             must_update = True
-            keywords.extend(extratags)
+            target_keywords.extend(extratags)
         if must_update:
             update_descriptions = True
-            updated_files[file] = (description, keywords)
-        if rel_file not in ref_descriptions:
+            updated_files[file] = (description, target_keywords)
+        if must_update or rel_file not in ref_descriptions:
             LOGGER.debug(f"{'Update' if rel_file in ref_descriptions else 'Add'} in csv file '{rel_file}'")
             update_descriptions = True
-            ref_descriptions[rel_file] = (description, keywords)
+            ref_descriptions[rel_file] = (description, target_keywords)
     LOGGER.debug("Update images done")
     return update_descriptions
 
@@ -311,24 +322,26 @@ def _manage_db(exif_tool: ExifTool,  # pylint: disable=too-many-arguments,too-ma
                 LOGGER.debug(f"Inspect {rel_file}...")
             file = rel_file.absolute()
             if file.is_file():
-                file_date = file.stat().st_mtime
-                must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
-                if not keywords:
-                    LOGGER.warning(f"{file.relative_to(Path.cwd())} has not tags")
-                if not from_files and force:
-                    must_update = True
-                if not from_files and not set(extratags).issubset(keywords):
-                    tags.extend(extratags)
-                    tags = sorted(tags)
-                if must_update:
-                    updated_files[file] = (description, keywords)
-                if from_db and (must_update or desc != description or tags != keywords):
-                    LOGGER.debug(f"Refresh file '{file}'")
-                    updated_files[file] = (desc, tags)
-                elif (must_update or desc != description or tags != keywords):
-                    update_descriptions = _manage_file_and_db(desc, description, description_date, file, file_date,
-                                                              from_db, keywords, merge, ref_descriptions, rel_file,
-                                                              tags, update_descriptions, updated_files)
+                try:
+                    file_date = file.stat().st_mtime
+                    must_update, description, keywords = _extract_description_and_tags(exif_tool, file)
+                    if not keywords:
+                        LOGGER.warning(f"{file.relative_to(Path.cwd())} has not tags")
+                    if not from_files and force:
+                        must_update = True
+                    if not from_files and not set(extratags).issubset(keywords):
+                        tags = sorted(tags)
+                    if must_update:
+                        updated_files[file] = (description, keywords)
+                    if from_db and (must_update or desc != description or tags != keywords):
+                        LOGGER.debug(f"Refresh file '{file}'")
+                        updated_files[file] = (desc, tags)
+                    elif (must_update or desc != description or tags != keywords):
+                        update_descriptions = _manage_file_and_db(desc, description, description_date, file, file_date,
+                                                                  from_db, keywords, merge, ref_descriptions, rel_file,
+                                                                  tags, update_descriptions, updated_files)
+                except JSONDecodeError:
+                    LOGGER.warning(f"Impossible to analyse '{file}' (JSONDecodeError)")
             else:
                 # LOGGER.debug(f"Remove in csv file '{rel_file}'")
                 remove_files.append(rel_file)
@@ -529,4 +542,8 @@ def main(  # pylint: disable=C0103
 
 
 if __name__ == '__main__':
+    if sys.platform.startswith("win"):
+        from ctypes import windll
+
+        windll.kernel32.SetConsoleCP(65001)  # Force Code Page console à UTF-8
     sys.exit(main(standalone_mode=False))  # pylint: disable=E1120,E1123

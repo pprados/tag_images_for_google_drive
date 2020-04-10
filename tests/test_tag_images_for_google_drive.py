@@ -218,7 +218,8 @@ class TestTagImages(unittest.TestCase):
         self.assertEqual({
             pngfile: ("Description", ["tag1", "tag2"]),
         }, ref_descriptions)
-        self.assertEqual({}, updated_files)
+        self.assertEqual({
+        }, updated_files)
 
     def test_from_db(self):
         # Given
@@ -243,6 +244,7 @@ class TestTagImages(unittest.TestCase):
             Path("tests/image_with_tags.png"): ("Description", ["tag1", "tag2"]),
             Path("tests/image_with_tags2.png"): ("Description", ["csv", "tag1", "tag2"]),
             Path("tests/image_without_tags.png"): ("Description", ["csv", "tag1", "tag2"]),
+            Path("tests/image_with_PNGDescription.png"): ("Description", ["tag1", "tag2"]),
             pngfile: ("Description", ["tag1", "tag2"]),
         }, ref_descriptions)
         self.assertEqual({
@@ -320,12 +322,11 @@ class TestTagImages(unittest.TestCase):
 
         # Then file was added in ref_description and file was updated
         self.assertEqual({
-            Path("tests/image_with_tags.png"): ("Description", ["mytag", "tag1", "tag2"]),
+            Path("tests/image_with_tags.png"): ("Description", ["tag1", "tag2"]),
             Path("tests/image_with_tags2.png"): ("One description", ["csv", "mytag", "tag1", "tag2"]),
-            Path("tests/image_without_tags.png"): ("Description", ["csv", "mytag", "tag1", "tag2"]),
+            Path("tests/image_without_tags.png"): ("Description", ["csv", "tag1", "tag2"]),
         }, ref_descriptions)
         self.assertEqual({
             Path("tests/image_with_tags2.png").absolute(): ("One description", ["csv", "mytag", "tag1", "tag2"]),
-            Path("tests/image_with_tags.png").absolute(): ("Description", ["mytag", "tag1", "tag2"]),
-            Path("tests/image_without_tags.png").absolute(): ("Description", ["csv", "mytag", "tag1", "tag2"]),
+            Path("tests/image_without_tags.png").absolute(): ("Description", ["csv", "tag1", "tag2"]),
         }, updated_files)

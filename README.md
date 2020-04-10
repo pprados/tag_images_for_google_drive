@@ -62,11 +62,7 @@ Clone the git repository (see upper button)
 Different solutions is possible.
 
 ### For windows
-Use `chcp 16001` (utf-8), before use this tools. Or better,
-in the 1809 build of Windows 10 going to the system's Language settings,
-selecting Administrative language settings, clicking Change system locale...
-and checking the Beta: Use Unicode UTF-8 for worldwide language support
-box and then restarting my pc.
+Use `chcp 16001` (utf-8), before use this tools.
 
 ### Installation from one executable
 - Copy the file 'tag_images_for_google_drive.${OS}' to local directory

@@ -39,6 +39,7 @@ import logging
 import os
 import subprocess
 import warnings
+from json import JSONDecodeError
 from typing import Optional, Tuple, Type, Dict, Any, List
 
 LOGGER = logging.getLogger(__name__)
@@ -255,8 +256,28 @@ class ExifTool:
             raise TypeError("The argument 'filenames' must be "
                             "an iterable of strings")
         params = ["-" + t for t in tags]
-        params.append(filenames[0])
-        return self.execute_json(*params)
+        try:
+            # Check if only ascii filename
+            filenames[0].encode("ascii")
+            params.append(filenames[0])
+            try:
+                return self.execute_json(*params)
+            except JSONDecodeError:
+                LOGGER.warning(f"Can not manage filename {filenames} with unicode on Windows")
+                return [{}]
+        except UnicodeEncodeError:
+            # Work around **params
+            # p=subprocess.run(self.executable, *params, capture_output=True, encoding="UTF-8")
+            params = [self.executable,
+                      "-charset", _CHARSET,
+                      "-common_args", "-G", "-n",
+                      "-json",
+                      filenames[0]
+                      ] + params
+            p = subprocess.run(params, shell=True, capture_output=True,
+                               encoding=None,  # For windows :-(
+                               check=True)
+            return json.loads(p.stdout)
 
     def get_tags(self, tags, filename: str) -> Dict[str, Any]:
         """Return only specified tags for a single file.
