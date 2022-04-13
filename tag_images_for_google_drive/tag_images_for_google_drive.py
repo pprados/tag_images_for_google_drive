@@ -173,7 +173,7 @@ def tag_images_for_google_drive(
     assert not ((from_db or merge) and not database)
 
     if not extra_tags:
-        extra_tags = set([])
+        extra_tags = set()
 
     updated_files: Dict[Path, Tuple[str, List[str]]] = {}  # Files to update
 
@@ -235,7 +235,7 @@ def tag_images_for_google_drive(
                 f"({int(nb_files / nb_total_tags * 100) if nb_total_tags else 0} t/f).")
     _manage_tags_file(all_tags, dry, tag_file)
 
-    LOGGER.debug(f"Done")
+    LOGGER.debug("Done")
     return ref_descriptions, updated_files
 
 
@@ -319,7 +319,7 @@ def _manage_db(exif_tool: ExifTool,  # pylint: disable=too-many-arguments,too-ma
                force: bool,
                verbose: int = 0) -> bool:
     if not from_files:
-        LOGGER.debug(f"Apply csv file...")
+        LOGGER.debug("Apply csv file...")
         remove_files = []
         for rel_file, (desc, tags) in ref_descriptions.items():
             if verbose >= 3:
@@ -352,14 +352,14 @@ def _manage_db(exif_tool: ExifTool,  # pylint: disable=too-many-arguments,too-ma
 
         for rel_file in remove_files:
             ref_descriptions.pop(rel_file)
-        LOGGER.debug(f"Apply csv file done")
+        LOGGER.debug("Apply csv file done")
     return update_descriptions
 
 
 def _manage_updated_files(exif_tools: ExifTool,
                           dry: bool,
                           updated_files: Dict[Path, Tuple[str, List[str]]]) -> None:
-    LOGGER.debug(f"Update identified files in csv ...")
+    LOGGER.debug("Update identified files in csv ...")
     for file, (description, keywords) in updated_files.items():
         str_tags = "#" + " #".join(keywords) if len(keywords) > 0 else ""
         description = description.strip()
@@ -390,7 +390,7 @@ def _manage_updated_db(database: Optional[Path],
                        update_descriptions: bool):
     if database and not dry and update_descriptions:
         try:
-            LOGGER.debug(f"Update csv file...")
+            LOGGER.debug("Update csv file...")
             # Update "in place"
             old_version = database.with_suffix(".csv.old")
             if database.exists():

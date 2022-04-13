@@ -121,7 +121,7 @@ class ExifTool:
         if self.running:
             warnings.warn("ExifTool already running; doing nothing.")
             return
-        with open(os.devnull, "w") as devnull:
+        with open(os.devnull, "w", encoding="utf-8") as devnull:
             cmd = [self.executable,
                    "-stay_open", "True",
                    "-charset", _CHARSET,
@@ -129,7 +129,7 @@ class ExifTool:
                    "-@", "-",
                    "-common_args", "-G", "-n",
                    ]
-            self._process = subprocess.Popen(
+            self._process = subprocess.Popen(  # pylint: disable=(consider-using-with
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,

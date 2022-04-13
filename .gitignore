@@ -121,6 +121,7 @@ site/
 
 # Project
 gdfuse/default/state
+gdfuse/default/config
 .cid_docker_daemon
 .pid_docker_daemon
 Dockerfile

@@ -3,6 +3,7 @@
 ## Motivation
 Synchronize a CSV database and PNG/JPEG files to add #hashtag in image description.
 Then, you can synchronize all files with Google drive and search image with *tags*.
+Google set the metadata of the file from the 'description' metadata in graphic file.
 
 ## Synopsis
 Google drive use only the description meta-data to index an image.
@@ -100,6 +101,7 @@ $ docker build \
 -f Dockerfile \
 --build-arg OS_VERSION="latest" \
 --build-arg GDRIVE_ROOT_FOLDER="/Images" \
+--build-arg GDRIVE_TEAM_DRIVE_ID="" \
 --build-arg PARAMS="'**/*.png' '**/*.jpg'" \
 --build-arg CRON_FREQUENCE="* */12 * * *" \
 -t "$(USER)/tag_image_for_google_drive:latest" .

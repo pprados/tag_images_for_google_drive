@@ -28,7 +28,7 @@ s3_bucket = "tag_images_for_google_drive".replace('_', '-')
 # For git clone ...
 git_url = _git_url()
 # Project home
-home_url = re.sub(r".*@(.*):(.*).git", r"http://\1/\2", _git_url())
+home_url = re.sub(r".*@(.*):(.*).git", r"https://\1/\2", _git_url())
 
 sys.path.insert(0, os.path.abspath('..'))
 

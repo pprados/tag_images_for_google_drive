@@ -187,8 +187,8 @@ class TestTagImages(unittest.TestCase):
         ref_descriptions, updated_files = \
             tag_images_for_google_drive(
                 database=csvfile,
-                input_files=[pngfile],
-                extra_tags=[],
+                input_files={pngfile},
+                extra_tags=set(),
                 dry=True,
                 from_files=False,
                 from_db=False,
@@ -207,8 +207,8 @@ class TestTagImages(unittest.TestCase):
         ref_descriptions, updated_files = \
             tag_images_for_google_drive(
                 database=csvfile,
-                input_files=[pngfile],
-                extra_tags=[],
+                input_files={pngfile},
+                extra_tags=set(),
                 dry=True,
                 from_files=False,
                 from_db=False,
@@ -231,8 +231,8 @@ class TestTagImages(unittest.TestCase):
         ref_descriptions, updated_files = \
             tag_images_for_google_drive(
                 database=csvfile,
-                input_files=[pngfile],
-                extra_tags=[],
+                input_files={pngfile},
+                extra_tags=set(),
                 dry=True,
                 from_files=False,
                 from_db=True,
@@ -261,8 +261,8 @@ class TestTagImages(unittest.TestCase):
         ref_descriptions, updated_files = \
             tag_images_for_google_drive(
                 database=csvfile,
-                input_files=[pngfile],
-                extra_tags=[],
+                input_files={pngfile},
+                extra_tags=set(),
                 dry=True,
                 from_files=True,
                 from_db=False,
@@ -288,8 +288,8 @@ class TestTagImages(unittest.TestCase):
         ref_descriptions, updated_files = \
             tag_images_for_google_drive(
                 database=csvfile,
-                input_files=[pngfile],
-                extra_tags=[],
+                input_files={pngfile},
+                extra_tags=set(),
                 dry=True,
                 from_files=False,
                 from_db=False,
@@ -315,8 +315,8 @@ class TestTagImages(unittest.TestCase):
         ref_descriptions, updated_files = \
             tag_images_for_google_drive(
                 database=csvfile,
-                input_files=[pngfile],
-                extra_tags=['mytag'],
+                input_files={pngfile},
+                extra_tags={'mytag'},
                 dry=True,
             )
 

@@ -5,6 +5,10 @@ ifeq (0,$(shell echo "$(shell echo "$(MAKE_VERSION)" | sed -E 's/^([0-9]+).*/\1/
 $(error Bad make version, please install make >= 4)
 endif
 
+# Override project variables
+ifneq (,$(wildcard .env))
+include .env
+endif
 
 SHELL=/bin/bash
 .SHELLFLAGS = -e -c
@@ -55,6 +59,7 @@ VENV ?= $(PRJ)
 DOCKER_REPOSITORY?=$(USER)
 DOCKER_PARAMS?=--db descriptions.csv --tagfile tags.txt '**/*.png' '**/*.jpg'
 DOCKER_GDRIVE_ROOT_FOLDER?=/Images
+DOCKER_GDRIVE_TEAM_DRIVE_ID?=
 DOCKER_CRON_FREQUENCE?=* */12 * * *
 
 PRJ_PACKAGE:=$(PRJ)
@@ -146,7 +151,7 @@ dump-%:
 		if test -n "\$$ncolors" && test \$$ncolors -ge 8; then
 			normal="\$$(tput sgr0)"
 			red="\$$(tput setaf 1)"
-	        green="\$$(tput setaf 2)"
+			green="\$$(tput setaf 2)"
 			yellow="\$$(tput setaf 3)"
 		fi
 	fi
@@ -197,17 +202,19 @@ $(CONDA_PREFIX)/bin/exiftool:
 ifeq ($(OS),Darwin)
 GCC=gcc
 else
-GCC=gcc_linux-64
+#GCC=gcc_linux-64
+GCC=gcc
 endif
 $(CONDA_PREFIX)/bin/$(GCC):
-	@conda install -y -c anaconda make $(GCC)
+	@conda install -y -c conda-forge make $(GCC)
 
 
 .PHONY: requirements dependencies
 REQUIREMENTS=$(PIP_PACKAGE) \
-  $(CONDA_PREFIX)/bin/exiftool \
-  $(CONDA_PREFIX)/bin/$(GCC) \
+	$(CONDA_PREFIX)/bin/exiftool \
+	$(CONDA_PREFIX)/bin/$(GCC) \
 	.gitattributes
+
 requirements: $(REQUIREMENTS)
 dependencies: requirements
 
@@ -277,11 +284,10 @@ upgrade-venv: upgrade-$(VENV)
 	@flake8 $(PRJ_PACKAGE)
 	@echo "---------------------- PYLINT"
 	@pylint $(PRJ_PACKAGE)
-	touch .make-lint
+	@date > .make-lint
 
 ## Lint the code
 lint: .make-lint
-
 
 $(CONDA_PREFIX)/bin/pytype:
 	@pip install $(PIP_ARGS) -q pytype
@@ -295,7 +301,8 @@ pytype.cfg: $(CONDA_PREFIX)/bin/pytype
 	$(VALIDATE_VENV)
 	@echo -e "$(cyan)Check typing...$(normal)"
 	MYPYPATH=./stubs/ mypy $(PRJ)
-	touch .make-typing
+	@date >.make-typing
+
 ## Check python typing
 typing: .make-typing
 
@@ -439,7 +446,7 @@ clean-all: clean remove-venv
 ifeq ($(BACKOS),Windows)
 PYTEST_ARGS ?=
 else
-PYTEST_ARGS ?=-n 0
+PYTEST_ARGS ?=
 endif
 
 .PHONY: test unittest functionaltest
@@ -496,9 +503,9 @@ PYINSTALLER_OPT=--hiddenimport _sysconfigdata_m_darwin_darwin --hidden-import=pk
 else
 PYINSTALLER_OPT=--hidden-import=pkg_resources.py2_warn
 endif
-dist/$(PRJ): .make-validate
+dist/$(PRJ)$(EXE): .make-validate
 	@PYTHONOPTIMIZE=2 && pyinstaller $(PYINSTALLER_OPT) --onefile $(PRJ)/$(PRJ).py
-	touch dist/$(PRJ)
+	touch dist/$(PRJ)$(EXE)
 ifeq ($(BACKOS),Windows)
 # Must have conda installed on windows with tag_images_for_google_drive env
 	/mnt/c/WINDOWS/system32/cmd.exe /C "conda activate $(PRJ) && python setup.py develop && \
@@ -527,7 +534,7 @@ gdfuse/default/state:
 
 
 # Update the dockerfile with the setup datas and version
-Dockerfile: setup.py
+Dockerfile: setup.py gdfuse/default/state gdfuse/default/config.template
 	@# Build docker image
 	VERSION="$$(./setup.py --version)"
 	DESCRIPTION="$$(./setup.py --description)"
@@ -544,10 +551,13 @@ Dockerfile: setup.py
 	FROM ubuntu:$${D}{OS_VERSION}
 	ARG PARAMS
 	ARG GDRIVE_ROOT_FOLDER
+	ARG GDRIVE_TEAM_DRIVE_ID
 	ARG CRON_FREQUENCE="* */12 * * *"
 	ENV _PARAMS="$${D}{PARAMS}"
 	ENV _GDRIVE_ROOT_FOLDER="$${D}{GDRIVE_ROOT_FOLDER}"
+	ENV _GDRIVE_TEAM_DRIVE_ID="$${D}{GDRIVE_TEAM_DRIVE_ID}"
 	ENV _CRON_FREQUENCE="$${D}{CRON_FREQUENCE}"
+	ENV DEBIAN_FRONTEND=noninteractive
 
 	LABEL version="$${VERSION}"
 	LABEL description="$${DESCRIPTION}"
@@ -556,6 +566,8 @@ Dockerfile: setup.py
 	LABEL maintainer="$${AUTHOR}"
 
 	COPY dist/tag_images_for_google_drive /
+	RUN echo 'tzdata tzdata/Areas select Europe' | debconf-set-selections
+	RUN echo 'tzdata tzdata/Zones/Europe select Paris' | debconf-set-selections
 	RUN apt-get update && \
 		apt-get install -y  exiftool software-properties-common cron gettext-base && \
 		add-apt-repository ppa:alessandro-strada/ppa && \
@@ -566,6 +578,7 @@ Dockerfile: setup.py
 	RUN mkdir -p /root/.gdfuse/default
 	COPY gdfuse/default/config.template /root/.gdfuse/default/config.template
 	RUN envsubst </root/.gdfuse/default/config.template >/root/.gdfuse/default/config
+	# WARNING: Copy access tokens !
 	COPY gdfuse/default/state /root/.gdfuse/default/state
 
 	RUN echo "$${D}{_CRON_FREQUENCE} cd \"/gdrive\" && /tag_images_for_google_drive $${D}{_PARAMS} > /proc/1/fd/1 2>/proc/1/fd/2" >/etc/cron.d/crontab
@@ -576,7 +589,7 @@ Dockerfile: setup.py
 	EOF
 
 # WARNING: never publish the container. The Google drive tokens are inside !
-.make-docker-build: Dockerfile dist/$(PRJ)$(EXE) gdfuse/default/state
+.make-docker-build: Dockerfile dist/$(PRJ)$(EXE) gdfuse/default/state gdfuse/default/config.template
 	@# Detect release version
 	if [[ "$${VERSION}" =~ "^[0-9](\.[0-9])+$$" ]];
 	then
@@ -587,6 +600,7 @@ Dockerfile: setup.py
 		--build-arg OS_VERSION="latest" \
 		--build-arg PARAMS="$(DOCKER_PARAMS)" \
 		--build-arg GDRIVE_ROOT_FOLDER="$(DOCKER_GDRIVE_ROOT_FOLDER)" \
+		--build-arg GDRIVE_TEAM_DRIVE_ID="$(DOCKER_GDRIVE_TEAM_DRIVE_ID)" \
 		--build-arg CRON_FREQUENCE="$(DOCKER_CRON_FREQUENCE)" \
 		$${TAG_VERSION} \
 		-t "$(DOCKER_REPOSITORY)/$(PRJ):latest" .
@@ -596,7 +610,7 @@ Dockerfile: setup.py
 ## Build the docker <PRJ>:latest
 docker-build: .make-docker-build
 
-# Reset and rebuild the container
+# Reset, rebuild and start the container
 docker-rebuild:
 	@rm -f Dockerfile .make-docker-build
 	$(MAKE) docker-stop docker-start
@@ -629,7 +643,7 @@ docker-attach: .cid_docker_daemon
 	$(SUDO) docker attach "$${CID}"
 
 ## Connect a bash in the container
-docker-bash: .cid_docker_daemon
+docker-bash docker-shell: .cid_docker_daemon
 	@CID=$$(cat .cid_docker_daemon)
 	$(SUDO) docker exec -i -t "$${CID}" /bin/bash
 
@@ -641,6 +655,15 @@ docker-stop:
 		rm -f .cid_docker_daemon
 		echo -e "$(cyan)Docker daemon stopped$(normal)"
 	fi
+
+docker-rm-image:
+	if [[ "$${VERSION}" =~ "^[0-9](\.[0-9])+$$" ]];
+	then
+		TAG_VERSION="$(DOCKER_REPOSITORY)/$(PRJ):$${VERSION}"
+	else
+		TAG_VERSION="$(DOCKER_REPOSITORY)/$(PRJ)"
+	fi
+	docker image rm $${TAG_VERSION}
 
 docker-logs: .cid_docker_daemon
 	@$(SUDO) docker container logs -f "$(PRJ)"
